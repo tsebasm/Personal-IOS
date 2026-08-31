@@ -7,11 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "seed": "node --env-file=.env.local scripts/seed.mjs",
+    "seed:reset": "node --env-file=.env.local scripts/seed-reset.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.5",
     "@supabase/supabase-js": "^2.112.4",
+    "lucide-react": "^1.37.0",
     "next": "16.3.3",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

@@ -15,13 +15,13 @@ export function MobileHeader({ userEmail }: { userEmail: string }) {
 
   return (
     <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border bg-surface">
-      <div className="text-sm font-medium text-ink">Personal OS</div>
+      <div className="text-sm font-semibold text-ink">Personal OS</div>
       <div className="flex items-center gap-3">
         <span className="text-xs text-ink-dim truncate max-w-[120px]">{userEmail}</span>
         <button
           type="button"
           onClick={handleSignOut}
-          className="text-xs text-ink-dim underline"
+          className="text-xs text-ink-dim hover:text-bad"
         >
           Salir
         </button>

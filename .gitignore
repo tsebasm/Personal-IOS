@@ -20,3 +20,6 @@ tsconfig.tsbuildinfo
 
 # vercel
 .vercel
+
+# supabase
+supabase/.temp

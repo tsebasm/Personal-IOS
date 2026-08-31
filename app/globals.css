@@ -3,58 +3,42 @@
 @tailwind utilities;
 
 :root {
-  --bg: #F3EFE6;
+  --bg: #F7F7F8;
   --surface: #FFFFFF;
-  --surface-2: #EAE3D2;
-  --ink: #1B1B22;
-  --ink-dim: #6B6A62;
-  --border: #DCD3BC;
-  --accent: #9C7027;
+  --surface-2: #F1F1F3;
+  --ink: #16161A;
+  --ink-dim: #8A8A93;
+  --border: #E7E7EA;
+  --accent: #16161A;
   --accent-ink: #FFFFFF;
-  --navy: #1F2A4A;
+  --navy: #16161A;
   --navy-ink: #FFFFFF;
-  --good: #276B45;
-  --good-bg: #E4EEE3;
-  --warn: #9C5A17;
-  --warn-bg: #F5E7D3;
-  --bad: #9C3B2E;
-  --bad-bg: #F5DFDA;
+  --good: #1D8A50;
+  --good-bg: #E7F5EC;
+  --warn: #B5650B;
+  --warn-bg: #FBEEDD;
+  --bad: #C23A2E;
+  --bad-bg: #FBE7E4;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0A0C12;
-    --surface: #12151F;
-    --surface-2: #171B29;
-    --ink: #ECE7DA;
-    --ink-dim: #93949E;
-    --border: #262B3C;
-    --accent: #D2A94F;
-    --accent-ink: #12151F;
-    --navy: #33436F;
-    --navy-ink: #F2F0E8;
-    --good: #57B37F;
-    --good-bg: #132A1F;
-    --warn: #E2A254;
-    --warn-bg: #2E2412;
-    --bad: #E2766A;
-    --bad-bg: #2E1714;
-  }
-}
-
+/*
+ * Claro (arriba) es siempre el default — no seguimos prefers-color-scheme.
+ * Oscuro es una elección explícita del usuario (profiles.theme = 'dark'),
+ * aplicada por el root layout como [data-theme="dark"] en <html>.
+ */
 :root[data-theme="dark"] {
-  --bg: #0A0C12;
-  --surface: #12151F;
-  --surface-2: #171B29;
-  --ink: #ECE7DA;
-  --ink-dim: #93949E;
-  --border: #262B3C;
-  --accent: #D2A94F;
-  --accent-ink: #12151F;
-  --navy: #33436F;
-  --navy-ink: #F2F0E8;
-  --good: #57B37F;
-  --good-bg: #132A1F;
+  --bg: #0B0B0F;
+  --surface: #131317;
+  --surface-2: #1A1A20;
+  --ink: #F1F1F3;
+  --ink-dim: #8E8E98;
+  --border: #26262E;
+  --accent: #F1F1F3;
+  --accent-ink: #16161A;
+  --navy: #F1F1F3;
+  --navy-ink: #16161A;
+  --good: #4FBE81;
+  --good-bg: #12271C;
   --warn: #E2A254;
   --warn-bg: #2E2412;
   --bad: #E2766A;

@@ -2,40 +2,59 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutGrid,
+  Sun,
+  CheckSquare,
+  FolderKanban,
+  Target,
+  Repeat,
+  BookOpen,
+  Wallet,
+  RefreshCw,
+  Sparkles,
+  Building2,
+  Plus,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { ModeToggle } from "@/components/mode-toggle";
 
 type NavItem = {
   href: string;
   label: string;
-  icon: string;
-  phase: number; // roadmap phase that builds this section
+  icon: React.ComponentType<{ size?: number; className?: string }>;
 };
 
 const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: "▦", phase: 1 },
-  { href: "/today", label: "Hoy", icon: "☉", phase: 3 },
-  { href: "/inbox", label: "Inbox", icon: "▾", phase: 5 },
-  { href: "/goals", label: "Metas", icon: "◎", phase: 2 },
-  { href: "/projects", label: "Proyectos", icon: "▤", phase: 2 },
-  { href: "/tasks", label: "Tareas", icon: "☑", phase: 3 },
-  { href: "/habits", label: "Hábitos", icon: "↻", phase: 6 },
-  { href: "/knowledge", label: "Conocimiento", icon: "✦", phase: 7 },
-  { href: "/finances", label: "Finanzas", icon: "◆", phase: 8 },
-  { href: "/calendar", label: "Calendario", icon: "▦", phase: 9 },
-  { href: "/reviews", label: "Revisiones", icon: "↺", phase: 10 },
-  { href: "/insights", label: "Insights", icon: "◈", phase: 11 },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/dashboard/today", label: "Hoy", icon: Sun },
+  { href: "/dashboard/tasks", label: "Tareas", icon: CheckSquare },
+  { href: "/dashboard/projects", label: "Proyectos", icon: FolderKanban },
+  { href: "/dashboard/goals", label: "Metas", icon: Target },
+  { href: "/dashboard/habits", label: "Hábitos", icon: Repeat },
+  { href: "/dashboard/knowledge", label: "Conocimiento", icon: BookOpen },
+  { href: "/dashboard/agencia", label: "Agencia", icon: Building2 },
+  { href: "/dashboard/finances", label: "Finanzas", icon: Wallet },
+  { href: "/dashboard/reviews", label: "Revisiones", icon: RefreshCw },
+  { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
 ];
-
-const CURRENT_PHASE = 1;
 
 export function Sidebar({
   areas,
   userEmail,
   userName,
+  theme,
+  mode,
+  focus,
 }: {
-  areas: { id: string; name: string }[];
+  areas: { id: string; name: string; color: string | null }[];
   userEmail: string;
   userName: string | null;
+  theme: "system" | "light" | "dark";
+  mode: "normal" | "config";
+  focus: { remaining: number; total: number };
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -47,19 +66,19 @@ export function Sidebar({
     router.refresh();
   }
 
-  const initials = (userName || userEmail).slice(0, 1).toUpperCase();
+  const displayName = userName || "Sebastián";
+  const initials = displayName.slice(0, 1).toUpperCase();
+  const pct = focus.total > 0 ? Math.round(((focus.total - focus.remaining) / focus.total) * 100) : 0;
 
   return (
     <aside className="hidden md:flex md:w-64 md:flex-none md:flex-col border-r border-border bg-surface px-4 py-5">
       <div className="flex items-center gap-3 px-2 pb-5 mb-4 border-b border-border">
-        <div className="h-9 w-9 rounded-full bg-navy text-navy-ink flex items-center justify-center font-display font-semibold text-sm">
+        <div className="h-9 w-9 rounded-full bg-ink text-bg flex items-center justify-center font-semibold text-sm">
           {initials}
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-medium text-ink truncate">
-            {userName || "Sebastián"}
-          </div>
-          <div className="text-xs text-ink-dim truncate">{userEmail}</div>
+          <div className="text-sm font-semibold text-ink truncate">{displayName}</div>
+          <div className="text-xs text-ink-dim truncate">Enfoque • Disciplina • Ejecución</div>
         </div>
       </div>
 
@@ -68,70 +87,85 @@ export function Sidebar({
       </div>
       <nav className="flex flex-col gap-0.5">
         {NAV.map((item) => {
-          const active = pathname === item.href;
-          const built = item.phase <= CURRENT_PHASE;
-          if (!built) {
-            return (
-              <div
-                key={item.href}
-                className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md text-sm text-ink-dim/60 cursor-not-allowed select-none"
-                title={`Se construye en la Fase ${item.phase}`}
-              >
-                <span className="flex items-center gap-2.5">
-                  <span className="w-4 text-center">{item.icon}</span>
-                  {item.label}
-                </span>
-                <span className="text-[0.62rem] font-mono border border-border rounded px-1 py-0.5 text-ink-dim/70">
-                  F{item.phase}
-                </span>
-              </div>
-            );
-          }
+          const active =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm ${
-                active
-                  ? "bg-navy text-navy-ink font-medium"
-                  : "text-ink hover:bg-surface-2"
+              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm transition-colors ${
+                active ? "bg-ink text-bg font-medium" : "text-ink hover:bg-surface-2"
               }`}
             >
-              <span className="w-4 text-center">{item.icon}</span>
+              <Icon size={16} className={active ? "text-bg" : "text-ink-dim"} />
               {item.label}
             </Link>
           );
         })}
       </nav>
 
-      <div className="text-[0.68rem] uppercase tracking-[0.08em] text-ink-dim px-2 mt-6 mb-2">
-        Áreas
+      <div className="flex items-center justify-between px-2 mt-6 mb-2">
+        <span className="text-[0.68rem] uppercase tracking-[0.08em] text-ink-dim">Áreas</span>
+        <Link href="/dashboard/areas" className="text-ink-dim hover:text-ink" title="Añadir área">
+          <Plus size={13} />
+        </Link>
       </div>
       <div className="flex flex-col gap-0.5">
         {areas.length === 0 ? (
-          <div className="px-2.5 py-2 text-xs text-ink-dim">
-            Se crean en la Fase 2.
-          </div>
+          <Link
+            href="/dashboard/areas"
+            className="px-2.5 py-2 text-xs text-ink-dim hover:text-ink"
+          >
+            Sin áreas todavía · + Añadir área
+          </Link>
         ) : (
           areas.map((a) => (
-            <div
+            <Link
               key={a.id}
-              className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm text-ink-dim"
+              href={`/dashboard/areas/${a.id}`}
+              className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-sm text-ink-dim hover:bg-surface-2 hover:text-ink"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-              {a.name}
-            </div>
+              <span
+                className="h-1.5 w-1.5 rounded-full flex-none"
+                style={{ backgroundColor: a.color || "var(--ink-dim)" }}
+              />
+              <span className="truncate">{a.name}</span>
+            </Link>
           ))
         )}
       </div>
 
-      <button
-        type="button"
-        onClick={handleSignOut}
-        className="mt-auto pt-4 text-left text-sm text-ink-dim hover:text-bad px-2.5"
-      >
-        Cerrar sesión
-      </button>
+      <div className="mt-auto pt-5">
+        <div className="rounded-card border border-border bg-surface-2 px-3 py-3">
+          <div className="text-xs font-semibold text-ink mb-2">Enfoque del día</div>
+          {focus.total === 0 ? (
+            <p className="text-[0.7rem] text-ink-dim">Sin bloques programados hoy</p>
+          ) : (
+            <>
+              <p className="text-[0.7rem] text-ink-dim mb-2">
+                {focus.remaining} {focus.remaining === 1 ? "bloque restante" : "bloques restantes"}
+              </p>
+              <ProgressBar value={pct} />
+            </>
+          )}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-0.5">
+          <ModeToggle mode={mode} />
+          <ThemeToggle theme={theme} />
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="text-left text-sm text-ink-dim hover:text-bad px-2.5 py-1.5"
+          >
+            Cerrar sesión
+          </button>
+        </div>
+        <div className="px-2.5 mt-1 text-[0.68rem] text-ink-dim truncate">{userEmail}</div>
+      </div>
     </aside>
   );
 }

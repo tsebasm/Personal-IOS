@@ -1,36 +1,41 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentProfile } from "@/lib/data/profile";
 import { Sidebar } from "@/components/sidebar";
 import { MobileHeader } from "@/components/mobile-header";
+import { isoDateInTimezone } from "@/lib/date";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect("/login");
+
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const today = isoDateInTimezone(profile.timezone);
 
-  if (!user) redirect("/login");
+  const [{ data: areas }, { data: todayTasks }] = await Promise.all([
+    supabase.from("areas").select("id, name, color").order("sort_order", { ascending: true }),
+    supabase
+      .from("tasks")
+      .select("id, status")
+      .eq("scheduled_date", today)
+      .not("status", "in", "(cancelled)"),
+  ]);
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const { data: areas } = await supabase
-    .from("areas")
-    .select("id, name")
-    .order("sort_order", { ascending: true });
+  const total = todayTasks?.length ?? 0;
+  const remaining = todayTasks?.filter((t) => t.status !== "done").length ?? 0;
 
   return (
     <div className="min-h-screen flex bg-bg">
       <Sidebar
         areas={areas ?? []}
-        userEmail={user.email ?? ""}
-        userName={profile?.full_name ?? null}
+        userEmail={profile.email ?? ""}
+        userName={profile.fullName}
+        theme={profile.theme}
+        mode={profile.mode}
+        focus={{ remaining, total }}
       />
       <div className="flex-1 min-w-0 flex flex-col">
-        <MobileHeader userEmail={user.email ?? ""} />
+        <MobileHeader userEmail={profile.email ?? ""} />
         {children}
       </div>
     </div>

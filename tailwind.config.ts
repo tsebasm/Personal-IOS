@@ -36,7 +36,7 @@ const config: Config = {
         mono: ["var(--font-plex-mono)", "SFMono-Regular", "Consolas", "monospace"],
       },
       boxShadow: {
-        card: "0 1px 2px rgba(30,25,10,0.06), 0 8px 24px rgba(30,25,10,0.06)",
+        card: "0 1px 2px rgba(16,16,20,0.04), 0 6px 16px rgba(16,16,20,0.04)",
       },
       borderRadius: {
         card: "10px",
