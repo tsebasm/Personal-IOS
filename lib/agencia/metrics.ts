@@ -110,3 +110,31 @@ export function sumProspectingTotals(
     { contacts: 0, replies: 0, appointments: 0, closed: 0 }
   );
 }
+
+export type VantMilestoneGoal = {
+  id: string;
+  title: string;
+  parent_goal_id: string | null;
+  status: string;
+  deadline: string | null;
+};
+
+/**
+ * La sub-meta activa de VANT (hija de la meta de facturación vinculada) con
+ * el vencimiento más próximo — el "qué sigue" concreto camino a la meta
+ * grande. No es una tabla aparte: se deriva de `goals` en cada carga.
+ */
+export function nextVantMilestone(goals: VantMilestoneGoal[], vantGoalId: string | null): VantMilestoneGoal | null {
+  if (!vantGoalId) return null;
+  const children = goals.filter((g) => g.parent_goal_id === vantGoalId && g.status === "activo" && g.deadline);
+  if (children.length === 0) return null;
+  return [...children].sort((a, b) => (a.deadline! < b.deadline! ? -1 : a.deadline! > b.deadline! ? 1 : 0))[0];
+}
+
+/** Días entre dos fechas "YYYY-MM-DD" (positivo si `deadline` es futuro respecto a `today`). */
+export function daysBetween(today: string, deadline: string): number {
+  const [ty, tm, td] = today.split("-").map(Number);
+  const [dy, dm, dd] = deadline.split("-").map(Number);
+  const msPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((Date.UTC(dy, dm - 1, dd) - Date.UTC(ty, tm - 1, td)) / msPerDay);
+}

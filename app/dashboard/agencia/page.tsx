@@ -23,7 +23,7 @@ export default async function AgenciaPage() {
 
   const [{ data: settings }, { data: goalsData }, { data: campaignsData }, { data: clientsData }] =
     await Promise.all([
-      supabase.from("agencia_settings").select("vant_goal_id").maybeSingle(),
+      supabase.from("agencia_settings").select("vant_goal_id, daily_outreach_target").maybeSingle(),
       supabase.from("goals").select("id, title").order("created_at", { ascending: false }),
       supabase
         .from("campaigns")
@@ -77,7 +77,13 @@ export default async function AgenciaPage() {
 
       <AgenciaTabs />
 
-      {canConfigure && <VantGoalConfig goals={goals} selectedGoalId={vantGoalId} />}
+      {canConfigure && (
+        <VantGoalConfig
+          goals={goals}
+          selectedGoalId={vantGoalId}
+          dailyOutreachTarget={settings?.daily_outreach_target ?? null}
+        />
+      )}
 
       {!vantGoal ? (
         <Card className="px-6 py-10 mb-6">

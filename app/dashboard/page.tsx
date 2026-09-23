@@ -9,15 +9,28 @@ import {
   FolderKanban,
   Repeat,
   BarChart2,
+  Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isoDateInTimezone, shiftIsoDate, friendlyDate } from "@/lib/date";
 import { computeStreak } from "@/lib/metrics";
+import {
+  computeProspectingRates,
+  sumProspectingTotals,
+  nextVantMilestone,
+  daysBetween,
+  type VantMilestoneGoal,
+} from "@/lib/agencia/metrics";
+import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
+
+const money = (n: number) =>
+  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+const pct = (n: number | null) => (n === null ? "—" : `${n.toFixed(0)}%`);
 
 const PRIORITY_RANK: Record<string, number> = { alta: 0, media: 1, baja: 2 };
 const PRIORITY_TONE: Record<string, "bad" | "warn" | "neutral"> = {
@@ -159,6 +172,62 @@ export default async function DashboardPage() {
     );
   }
 
+  let vantData: {
+    goalTitle: string | null;
+    targetValue: number | null;
+    mrr: number;
+    milestone: VantMilestoneGoal | null;
+    dailyTarget: number | null;
+    contactsToday: number;
+    rates: ReturnType<typeof computeProspectingRates>;
+  } | null = null;
+
+  try {
+    const thirtyDaysAgo = shiftIsoDate(today, -30);
+    const [{ data: settings }, { data: goalsData }, { data: sessionsData }, { data: clientsData }] =
+      await Promise.all([
+        supabase.from("agencia_settings").select("vant_goal_id, daily_outreach_target").maybeSingle(),
+        supabase.from("goals").select("id, title, parent_goal_id, status, deadline, target_value"),
+        supabase
+          .from("prospecting_sessions")
+          .select("date, contacts_count, replies_count, appointments_count, clients_closed")
+          .gte("date", thirtyDaysAgo)
+          .lte("date", today),
+        supabase
+          .from("vant_clients")
+          .select(
+            "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend"
+          ),
+      ]);
+
+    const vantGoalId = settings?.vant_goal_id ?? null;
+    if (vantGoalId) {
+      const goalsList = goalsData ?? [];
+      const vantGoal = goalsList.find((g) => g.id === vantGoalId) ?? null;
+      const sessions = sessionsData ?? [];
+      const clients: VantClient[] = (clientsData ?? []).map((c) => ({
+        ...c,
+        setup_fee: Number(c.setup_fee),
+        commission_value: Number(c.commission_value),
+        monthly_fee: Number(c.monthly_fee),
+        additional_commission: Number(c.additional_commission),
+        ad_spend: Number(c.ad_spend),
+      }));
+
+      vantData = {
+        goalTitle: vantGoal?.title ?? null,
+        targetValue: vantGoal?.target_value ?? null,
+        mrr: computeBillingSummary(clients, today).currentMonthRevenue,
+        milestone: nextVantMilestone(goalsList, vantGoalId),
+        dailyTarget: settings?.daily_outreach_target ?? null,
+        contactsToday: sessions.filter((s) => s.date === today).reduce((sum, s) => sum + s.contacts_count, 0),
+        rates: computeProspectingRates(sumProspectingTotals(sessions)),
+      };
+    }
+  } catch {
+    vantData = null;
+  }
+
   const firstName = (profile?.full_name ?? user?.email ?? "Sebastián").split(" ")[0];
   const fecha = friendlyDate(timezone);
 
@@ -279,6 +348,91 @@ export default async function DashboardPage() {
             hint={habits.length === 0 ? "Sin hábitos activos" : undefined}
           />
         </div>
+      )}
+
+      {vantData && (
+        <Card className="mb-6">
+          <CardHeader title="VANT — camino a diciembre" icon={<Target size={16} className="text-ink-dim" />} />
+          <div className="px-5 pb-5">
+            {vantData.targetValue ? (
+              <>
+                <div className="flex items-center justify-between gap-3 mb-1">
+                  <span className="text-xs text-ink-dim truncate">{vantData.goalTitle ?? "Facturación mensual (MRR)"}</span>
+                  <span className="text-sm font-semibold text-ink tabular-nums flex-none">
+                    {money(vantData.mrr)} / {money(vantData.targetValue)}
+                  </span>
+                </div>
+                <ProgressBar
+                  value={Math.min(100, Math.round((vantData.mrr / vantData.targetValue) * 100))}
+                  className="mb-4"
+                />
+              </>
+            ) : (
+              <p className="text-xs text-ink-dim mb-4">
+                Vincula una meta de facturación en{" "}
+                <Link href="/dashboard/agencia" className="underline underline-offset-2 hover:text-ink">
+                  Agencia
+                </Link>{" "}
+                para ver el progreso aquí.
+              </p>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <div className="text-xs text-ink-dim mb-1">Próximo hito</div>
+                {vantData.milestone ? (
+                  <>
+                    <div className="text-sm font-medium text-ink truncate">{vantData.milestone.title}</div>
+                    <div className="text-xs text-ink-dim mt-0.5">
+                      {(() => {
+                        const d = daysBetween(today, vantData.milestone!.deadline!);
+                        return d < 0 ? `Vencido hace ${-d} días` : d === 0 ? "Vence hoy" : `Vence en ${d} días`;
+                      })()}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-ink-dim">Sin sub-metas activas</div>
+                )}
+              </div>
+
+              <div>
+                <div className="text-xs text-ink-dim mb-1">Mensajes en frío hoy</div>
+                {vantData.dailyTarget ? (
+                  <>
+                    <div className="text-sm font-semibold text-ink tabular-nums">
+                      {vantData.contactsToday} / {vantData.dailyTarget}
+                    </div>
+                    <ProgressBar
+                      value={Math.min(100, Math.round((vantData.contactsToday / vantData.dailyTarget) * 100))}
+                      className="mt-1.5"
+                    />
+                  </>
+                ) : (
+                  <Link
+                    href="/dashboard/agencia"
+                    className="text-xs text-ink-dim underline underline-offset-2 hover:text-ink"
+                  >
+                    Configura tu meta diaria
+                  </Link>
+                )}
+              </div>
+
+              <div>
+                <div className="text-xs text-ink-dim mb-1">Tasas (últimos 30 días)</div>
+                <div className="text-sm text-ink tabular-nums">
+                  {pct(vantData.rates.replyRate)} respuesta · {pct(vantData.rates.schedulingRate)} agendamiento
+                </div>
+              </div>
+            </div>
+
+            <Link
+              href="/dashboard/agencia/prospecting"
+              className="inline-block mt-4 text-xs font-medium text-ink-dim hover:text-ink"
+            >
+              Registrar prospección de hoy →
+            </Link>
+          </div>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

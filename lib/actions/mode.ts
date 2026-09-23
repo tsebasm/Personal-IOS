@@ -10,6 +10,6 @@ export async function updateMode(mode: "normal" | "config") {
   } = await supabase.auth.getUser();
   if (!user) return;
 
-  await supabase.from("profiles").update({ system_mode: mode }).eq("id", user.id);
+  await supabase.from("profiles").upsert({ id: user.id, system_mode: mode });
   revalidatePath("/", "layout");
 }
