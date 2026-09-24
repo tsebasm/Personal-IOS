@@ -7,7 +7,9 @@ const TABS = [
   { href: "/dashboard/agencia", label: "Dashboard" },
   { href: "/dashboard/agencia/campaigns", label: "Campañas" },
   { href: "/dashboard/agencia/prospecting", label: "Prospección" },
+  { href: "/dashboard/agencia/leads", label: "Leads" },
   { href: "/dashboard/agencia/hypotheses", label: "Hipótesis" },
+  { href: "/dashboard/agencia/experiments", label: "Experimentos" },
   { href: "/dashboard/agencia/clients", label: "Clientes" },
 ];
 
@@ -22,7 +24,7 @@ export function AgenciaTabs() {
           <Link
             key={tab.href}
             href={tab.href}
-            className={`px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
+            className={`whitespace-nowrap px-3 py-2 text-sm border-b-2 -mb-px transition-colors ${
               active ? "border-ink text-ink font-medium" : "border-transparent text-ink-dim hover:text-ink"
             }`}
           >

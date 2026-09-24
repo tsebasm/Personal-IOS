@@ -23,11 +23,13 @@ export type ProspectingSession = {
   minutes_spent: number | null;
   hypothesis_id: string | null;
   message_variant: string | null;
+  experiment_id: string | null;
   offer: string | null;
   notes: string | null;
 };
 
 export type HypothesisOption = { id: string; statement: string; status: string };
+export type ExperimentOption = { id: string; name: string; status: string; variants: string[] };
 
 const COUNTS = [
   { name: "contacts_count", label: "Contactos nuevos" },
@@ -45,11 +47,12 @@ type Props = {
   submitLabel: string;
   trigger: (open: () => void) => React.ReactNode;
   hypotheses: HypothesisOption[];
+  experiments: ExperimentOption[];
   initial?: ProspectingSession;
 };
 
 /** Formulario único de sesión (crear/editar): embudo completo + atribución a hipótesis. */
-export function ProspectingSessionFormModal({ action, title, submitLabel, trigger, hypotheses, initial }: Props) {
+export function ProspectingSessionFormModal({ action, title, submitLabel, trigger, hypotheses, experiments, initial }: Props) {
   const { open, setOpen, state, formAction, pending } = useModalForm(action);
   const p = initial ? `ps-${initial.id}` : "ps-new";
   // Rechazadas solo se ofrecen si esta sesión ya estaba atribuida a una (histórico intacto).
@@ -107,6 +110,19 @@ export function ProspectingSessionFormModal({ action, title, submitLabel, trigge
                   {h.statement.slice(0, 80)}
                 </option>
               ))}
+            </Select>
+          </Field>
+
+          <Field label="Experimento (opcional)" htmlFor={`${p}-experiment`}>
+            <Select id={`${p}-experiment`} name="experiment_id" defaultValue={initial?.experiment_id ?? ""}>
+              <option value="">— Ninguno —</option>
+              {experiments
+                .filter((e) => e.status === "running" || e.id === initial?.experiment_id)
+                .map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.name} (variantes: {e.variants.join(", ")})
+                  </option>
+                ))}
             </Select>
           </Field>
 

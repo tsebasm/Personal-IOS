@@ -15,18 +15,20 @@ const pct = (n: number | null) => formatPct(n, 1);
 
 export default async function ProspectingPage() {
   const supabase = await createClient();
-  const [{ data }, { data: hypothesesData }] = await Promise.all([
+  const [{ data }, { data: hypothesesData }, { data: experimentsData }] = await Promise.all([
     supabase
       .from("prospecting_sessions")
       .select(
-        "id, date, channel, contacts_count, replies_count, appointments_count, shows_count, proposals_count, followups_count, clients_closed, minutes_spent, hypothesis_id, message_variant, offer, notes"
+        "id, date, channel, contacts_count, replies_count, appointments_count, shows_count, proposals_count, followups_count, clients_closed, minutes_spent, hypothesis_id, message_variant, experiment_id, offer, notes"
       )
       .order("date", { ascending: false }),
     supabase.from("hypotheses").select("id, statement, status").order("created_at", { ascending: false }),
+    supabase.from("experiments").select("id, name, status, variants").order("created_at", { ascending: false }),
   ]);
 
   const sessions = (data ?? []) as ProspectingSession[];
   const hypotheses = hypothesesData ?? [];
+  const experiments = experimentsData ?? [];
   const hypothesisById = new Map(hypotheses.map((h) => [h.id, h.statement]));
   const totals = sumProspectingTotals(sessions);
   const totalsRates = computeProspectingRates(totals);
@@ -38,7 +40,7 @@ export default async function ProspectingPage() {
           <h1 className="text-2xl font-semibold text-ink">Agencia</h1>
           <p className="text-sm text-ink-dim mt-1">Prospección en frío (outbound).</p>
         </div>
-        <CreateProspectingButton hypotheses={hypotheses} />
+        <CreateProspectingButton hypotheses={hypotheses} experiments={experiments} />
       </div>
 
       <AgenciaTabs />
@@ -49,7 +51,7 @@ export default async function ProspectingPage() {
             icon={<Phone size={20} />}
             title="Sin sesiones de prospección"
             description="Registra tu primera sesión de outbound para ver resultados acumulados."
-            action={<CreateProspectingButton hypotheses={hypotheses} />}
+            action={<CreateProspectingButton hypotheses={hypotheses} experiments={experiments} />}
           />
         </Card>
       ) : (
@@ -95,7 +97,7 @@ export default async function ProspectingPage() {
                       {hypothesis && <div className="text-xs text-ink-dim mt-0.5 truncate">Hipótesis: {hypothesis}</div>}
                     </div>
                     <div className="flex items-center gap-2.5 flex-none">
-                      <EditProspectingButton session={s} hypotheses={hypotheses} />
+                      <EditProspectingButton session={s} hypotheses={hypotheses} experiments={experiments} />
                       <DeleteButton
                         action={deleteProspectingSession.bind(null, s.id)}
                         confirmMessage="¿Eliminar esta sesión de prospección?"

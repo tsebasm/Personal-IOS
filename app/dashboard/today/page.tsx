@@ -272,7 +272,10 @@ function PriorityItem({ rank, scored }: { rank: number; scored: ScoredAction }) 
           {item.kind === "task" ? (
             <TaskDoneToggle taskId={item.id} done={false} />
           ) : (
-            <Link href="/dashboard/agencia/prospecting" className="text-xs font-medium text-ink-dim hover:text-ink whitespace-nowrap">
+            <Link
+              href={item.id === "plan:followups" ? "/dashboard/agencia/leads" : "/dashboard/agencia/prospecting"}
+              className="text-xs font-medium text-ink-dim hover:text-ink whitespace-nowrap"
+            >
               Registrar →
             </Link>
           )}

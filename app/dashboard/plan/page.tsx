@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AssumptionsButton, PipelineButton } from "./forms";
+import { PlanPhasesCard, BottleneckCard } from "./growth-cards";
 
 const SOURCE_TONE: Record<RateSource, "good" | "warn" | "bad" | "neutral"> = {
   historical: "good",
@@ -24,7 +25,7 @@ const int = (n: number) => Math.round(n).toLocaleString("es-CO");
 export default async function PlanPage() {
   const ctx = await loadPlanContext();
   if (!ctx) return null;
-  const { plan, assumptions, pipeline, totals, today } = ctx;
+  const { plan, assumptions, pipeline, totals, today, bottleneck, phases, pipelineSource } = ctx;
 
   const header = (
     <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
@@ -35,7 +36,7 @@ export default async function PlanPage() {
         </p>
       </div>
       <div className="flex gap-2">
-        <PipelineButton pipeline={pipeline} today={today} />
+        {pipelineSource === "manual" && <PipelineButton pipeline={pipeline} today={today} />}
         <AssumptionsButton assumptions={assumptions} />
       </div>
     </div>
@@ -104,6 +105,9 @@ export default async function PlanPage() {
           </div>
         </div>
       </Card>
+
+      <BottleneckCard bottleneck={bottleneck} />
+      {phases && <PlanPhasesCard phases={phases} />}
 
       {/* RATES -------------------------------------------------------------- */}
       <Card className="mb-6">
@@ -195,7 +199,7 @@ export default async function PlanPage() {
               {reverse.expectedFromPipeline > 0 && (
                 <p className="text-xs text-ink-dim mb-4">
                   El pipeline abierto ({pipeline.replied} con respuesta, {pipeline.booked} agendadas, {pipeline.showed} asistidas
-                  {pipeline.as_of ? `, al ${pipeline.as_of}` : ""}) aporta ≈ {reverse.expectedFromPipeline.toFixed(2)} cierres esperados.
+                  {pipelineSource === "leads" ? ", desde tus leads" : pipeline.as_of ? `, foto manual al ${pipeline.as_of}` : ""}) aporta ≈ {reverse.expectedFromPipeline.toFixed(2)} cierres esperados.
                 </p>
               )}
 

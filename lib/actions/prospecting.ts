@@ -18,6 +18,7 @@ const schema = z.object({
   minutes_spent: z.string().optional(),
   hypothesis_id: z.string().uuid().optional(),
   message_variant: z.string().trim().max(80).optional(),
+  experiment_id: z.string().uuid().optional(),
   offer: z.string().trim().max(200).optional(),
   notes: z.string().trim().max(2000).optional(),
 });
@@ -36,6 +37,7 @@ function funnelExtras(d: z.infer<typeof schema>) {
     minutes_spent: d.minutes_spent ? toNonNegativeInt(d.minutes_spent) : null,
     hypothesis_id: d.hypothesis_id || null,
     message_variant: d.message_variant || null,
+    experiment_id: d.experiment_id || null,
   };
 }
 
@@ -53,6 +55,7 @@ function readForm(formData: FormData) {
     minutes_spent: formData.get("minutes_spent") || undefined,
     hypothesis_id: formData.get("hypothesis_id") || undefined,
     message_variant: formData.get("message_variant") || undefined,
+    experiment_id: formData.get("experiment_id") || undefined,
     offer: formData.get("offer") || undefined,
     notes: formData.get("notes") || undefined,
   });

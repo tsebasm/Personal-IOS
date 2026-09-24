@@ -109,6 +109,26 @@ export const loadTodayContext = cache(async (): Promise<TodayContext | null> => 
     });
   }
 
+  // Follow-ups vencidos (tabla leads) compiten como una acción: cerrar lo abierto antes de abrir más.
+  const overdue = planCtx?.overdueFollowups ?? 0;
+  if (overdue > 0) {
+    candidates.push({
+      id: "plan:followups",
+      kind: "plan",
+      title: `Hacer ${overdue} follow-up(s) pendientes`,
+      priority: "alta",
+      impact_score: 5,
+      effort: 2,
+      goal_id: northStarId,
+      lever: "follow_up",
+      deadline: today,
+      scheduled_date: today,
+      estimated_minutes: minutesPerContact !== null ? Math.ceil(overdue * minutesPerContact) : null,
+      execution_mode: null,
+      openDependencies: 0,
+    });
+  }
+
   const goalParents = new Map((goals ?? []).map((g) => [g.id, g.parent_goal_id as string | null]));
   const activeGoalIds = new Set((goals ?? []).filter((g) => g.status === "activo").map((g) => g.id));
   const ranking = rankActions(candidates, {
