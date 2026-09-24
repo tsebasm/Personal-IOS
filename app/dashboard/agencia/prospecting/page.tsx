@@ -2,23 +2,32 @@ import { Phone } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { deleteProspectingSession } from "@/lib/actions/prospecting";
 import { computeProspectingRates, sumProspectingTotals } from "@/lib/agencia/metrics";
+import { pct as formatPct } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { AgenciaTabs } from "../tabs";
 import { CreateProspectingButton } from "./create-button";
 import { EditProspectingButton } from "./edit-button";
+import type { ProspectingSession } from "./session-form";
 
-const pct = (n: number | null) => (n === null ? "—" : `${n.toFixed(1)}%`);
+const pct = (n: number | null) => formatPct(n, 1);
 
 export default async function ProspectingPage() {
   const supabase = await createClient();
-  const { data } = await supabase
-    .from("prospecting_sessions")
-    .select("id, date, channel, contacts_count, replies_count, appointments_count, clients_closed, offer, notes")
-    .order("date", { ascending: false });
+  const [{ data }, { data: hypothesesData }] = await Promise.all([
+    supabase
+      .from("prospecting_sessions")
+      .select(
+        "id, date, channel, contacts_count, replies_count, appointments_count, shows_count, proposals_count, followups_count, clients_closed, minutes_spent, hypothesis_id, message_variant, offer, notes"
+      )
+      .order("date", { ascending: false }),
+    supabase.from("hypotheses").select("id, statement, status").order("created_at", { ascending: false }),
+  ]);
 
-  const sessions = data ?? [];
+  const sessions = (data ?? []) as ProspectingSession[];
+  const hypotheses = hypothesesData ?? [];
+  const hypothesisById = new Map(hypotheses.map((h) => [h.id, h.statement]));
   const totals = sumProspectingTotals(sessions);
   const totalsRates = computeProspectingRates(totals);
 
@@ -29,7 +38,7 @@ export default async function ProspectingPage() {
           <h1 className="text-2xl font-semibold text-ink">Agencia</h1>
           <p className="text-sm text-ink-dim mt-1">Prospección en frío (outbound).</p>
         </div>
-        <CreateProspectingButton />
+        <CreateProspectingButton hypotheses={hypotheses} />
       </div>
 
       <AgenciaTabs />
@@ -40,7 +49,7 @@ export default async function ProspectingPage() {
             icon={<Phone size={20} />}
             title="Sin sesiones de prospección"
             description="Registra tu primera sesión de outbound para ver resultados acumulados."
-            action={<CreateProspectingButton />}
+            action={<CreateProspectingButton hypotheses={hypotheses} />}
           />
         </Card>
       ) : (
@@ -49,11 +58,16 @@ export default async function ProspectingPage() {
             <CardHeader title="Resultados acumulados" />
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-5 pb-5 text-xs">
               <Metric label="Contactos" value={`${totals.contacts}`} />
+              <Metric label="Follow-ups" value={`${totals.followups}`} />
               <Metric label="Respuestas" value={`${totals.replies}`} />
               <Metric label="Citas agendadas" value={`${totals.appointments}`} />
+              <Metric label="Citas asistidas" value={`${totals.shows}`} />
+              <Metric label="Propuestas" value={`${totals.proposals}`} />
               <Metric label="Clientes cerrados" value={`${totals.closed}`} />
+              <Metric label="Horas invertidas" value={totals.minutes > 0 ? (totals.minutes / 60).toFixed(1) : "—"} />
               <Metric label="Tasa de respuesta" value={pct(totalsRates.replyRate)} />
               <Metric label="Tasa de agendamiento" value={pct(totalsRates.schedulingRate)} />
+              <Metric label="Tasa de asistencia" value={pct(totalsRates.showRate)} />
               <Metric label="Tasa de cierre" value={pct(totalsRates.closingRate)} />
             </div>
           </Card>
@@ -64,8 +78,10 @@ export default async function ProspectingPage() {
                 contacts: s.contacts_count,
                 replies: s.replies_count,
                 appointments: s.appointments_count,
+                shows: s.shows_count,
                 closed: s.clients_closed,
               });
+              const hypothesis = s.hypothesis_id ? hypothesisById.get(s.hypothesis_id) : null;
               return (
                 <Card key={s.id} className="px-5 py-4">
                   <div className="flex items-start justify-between gap-3 mb-3">
@@ -73,11 +89,13 @@ export default async function ProspectingPage() {
                       <div className="text-sm font-medium text-ink">{s.channel}</div>
                       <div className="text-xs text-ink-dim mt-0.5">
                         {s.date}
+                        {s.message_variant ? ` · mensaje ${s.message_variant}` : ""}
                         {s.offer ? ` · ${s.offer}` : ""}
                       </div>
+                      {hypothesis && <div className="text-xs text-ink-dim mt-0.5 truncate">Hipótesis: {hypothesis}</div>}
                     </div>
                     <div className="flex items-center gap-2.5 flex-none">
-                      <EditProspectingButton session={s} />
+                      <EditProspectingButton session={s} hypotheses={hypotheses} />
                       <DeleteButton
                         action={deleteProspectingSession.bind(null, s.id)}
                         confirmMessage="¿Eliminar esta sesión de prospección?"
@@ -87,10 +105,11 @@ export default async function ProspectingPage() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <Metric label="Contactos" value={`${s.contacts_count}`} />
                     <Metric label="Respuestas" value={`${s.replies_count}`} />
-                    <Metric label="Citas" value={`${s.appointments_count}`} />
+                    <Metric label="Citas / asistidas" value={`${s.appointments_count} / ${s.shows_count}`} />
                     <Metric label="Cerrados" value={`${s.clients_closed}`} />
                     <Metric label="Tasa respuesta" value={pct(rates.replyRate)} />
                     <Metric label="Tasa agendamiento" value={pct(rates.schedulingRate)} />
+                    <Metric label="Tasa asistencia" value={pct(rates.showRate)} />
                     <Metric label="Tasa cierre" value={pct(rates.closingRate)} />
                   </div>
                   {s.notes && <p className="text-xs text-ink-dim mt-3">{s.notes}</p>}

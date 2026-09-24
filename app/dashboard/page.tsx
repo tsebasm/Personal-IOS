@@ -22,15 +22,14 @@ import {
   type VantMilestoneGoal,
 } from "@/lib/agencia/metrics";
 import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
+import { goalProgressPct } from "@/lib/engine/metrics-registry";
+import { money, pct } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 
-const money = (n: number) =>
-  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-const pct = (n: number | null) => (n === null ? "—" : `${n.toFixed(0)}%`);
 
 const PRIORITY_RANK: Record<string, number> = { alta: 0, media: 1, baja: 2 };
 const PRIORITY_TONE: Record<string, "bad" | "warn" | "neutral"> = {
@@ -174,8 +173,10 @@ export default async function DashboardPage() {
 
   let vantData: {
     goalTitle: string | null;
+    goalDeadline: string | null;
     targetValue: number | null;
-    mrr: number;
+    baselineValue: number | null;
+    revenue: number;
     milestone: VantMilestoneGoal | null;
     dailyTarget: number | null;
     contactsToday: number;
@@ -187,7 +188,7 @@ export default async function DashboardPage() {
     const [{ data: settings }, { data: goalsData }, { data: sessionsData }, { data: clientsData }] =
       await Promise.all([
         supabase.from("agencia_settings").select("vant_goal_id, daily_outreach_target").maybeSingle(),
-        supabase.from("goals").select("id, title, parent_goal_id, status, deadline, target_value"),
+        supabase.from("goals").select("id, title, parent_goal_id, status, deadline, target_value, baseline_value"),
         supabase
           .from("prospecting_sessions")
           .select("date, contacts_count, replies_count, appointments_count, clients_closed")
@@ -196,7 +197,7 @@ export default async function DashboardPage() {
         supabase
           .from("vant_clients")
           .select(
-            "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend"
+            "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend, paused_at, cancelled_at"
           ),
       ]);
 
@@ -216,8 +217,12 @@ export default async function DashboardPage() {
 
       vantData = {
         goalTitle: vantGoal?.title ?? null,
+        goalDeadline: vantGoal?.deadline ?? null,
         targetValue: vantGoal?.target_value ?? null,
-        mrr: computeBillingSummary(clients, today).currentMonthRevenue,
+        baselineValue: vantGoal?.baseline_value ?? null,
+        // La meta de VANT se mide en facturación acumulada (metrics-registry: revenue_cumulative),
+        // la misma definición que usa /dashboard/agencia.
+        revenue: computeBillingSummary(clients, today).totalRevenue,
         milestone: nextVantMilestone(goalsList, vantGoalId),
         dailyTarget: settings?.daily_outreach_target ?? null,
         contactsToday: sessions.filter((s) => s.date === today).reduce((sum, s) => sum + s.contacts_count, 0),
@@ -228,7 +233,7 @@ export default async function DashboardPage() {
     vantData = null;
   }
 
-  const firstName = (profile?.full_name ?? user?.email ?? "Sebastián").split(" ")[0];
+  const firstName = (profile?.full_name ?? user?.email?.split("@")[0] ?? "").split(" ")[0];
   const fecha = friendlyDate(timezone);
 
   const completedToday = tasksToday.filter((t) => t.status === "done").length;
@@ -352,18 +357,21 @@ export default async function DashboardPage() {
 
       {vantData && (
         <Card className="mb-6">
-          <CardHeader title="VANT — camino a diciembre" icon={<Target size={16} className="text-ink-dim" />} />
+          <CardHeader
+            title={vantData.goalDeadline ? `VANT — meta al ${vantData.goalDeadline}` : "VANT"}
+            icon={<Target size={16} className="text-ink-dim" />}
+          />
           <div className="px-5 pb-5">
             {vantData.targetValue ? (
               <>
                 <div className="flex items-center justify-between gap-3 mb-1">
-                  <span className="text-xs text-ink-dim truncate">{vantData.goalTitle ?? "Facturación mensual (MRR)"}</span>
+                  <span className="text-xs text-ink-dim truncate">{vantData.goalTitle ?? "Facturación acumulada"}</span>
                   <span className="text-sm font-semibold text-ink tabular-nums flex-none">
-                    {money(vantData.mrr)} / {money(vantData.targetValue)}
+                    {money(vantData.revenue)} / {money(vantData.targetValue)}
                   </span>
                 </div>
                 <ProgressBar
-                  value={Math.min(100, Math.round((vantData.mrr / vantData.targetValue) * 100))}
+                  value={goalProgressPct(vantData.revenue, vantData.targetValue, vantData.baselineValue) ?? 0}
                   className="mb-4"
                 />
               </>

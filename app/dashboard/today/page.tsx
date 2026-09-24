@@ -28,7 +28,7 @@ export default async function TodayPage() {
 
   const timezone = profile?.timezone ?? "America/Bogota";
   const today = isoDateInTimezone(timezone);
-  const firstName = (profile?.full_name ?? user?.email ?? "Sebastián").split(" ")[0];
+  const firstName = (profile?.full_name ?? user?.email?.split("@")[0] ?? "").split(" ")[0];
 
   const [{ data: tasksData }, { data: habitsData }, { data: logsData }, { data: eventsData }] =
     await Promise.all([

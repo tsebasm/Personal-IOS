@@ -9,10 +9,9 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { AgenciaTabs } from "../tabs";
 import { CreateCampaignButton } from "./create-button";
 import { EditCampaignButton } from "./edit-button";
+import { money, pct as formatPct } from "@/lib/format";
 
-const money = (n: number) =>
-  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-const pct = (n: number | null) => (n === null ? "—" : `${n.toFixed(1)}%`);
+const pct = (n: number | null) => formatPct(n, 1);
 
 const STATUS_TONE: Record<string, "good" | "warn" | "neutral"> = {
   activa: "good",

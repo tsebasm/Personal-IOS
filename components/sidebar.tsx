@@ -68,7 +68,7 @@ export function Sidebar({
     router.refresh();
   }
 
-  const displayName = userName || "Sebastián";
+  const displayName = userName || userEmail.split("@")[0] || "—";
   const initials = displayName.slice(0, 1).toUpperCase();
   const pct = focus.total > 0 ? Math.round(((focus.total - focus.remaining) / focus.total) * 100) : 0;
 

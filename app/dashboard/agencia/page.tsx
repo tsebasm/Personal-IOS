@@ -4,15 +4,15 @@ import { getCurrentProfile } from "@/lib/data/profile";
 import { isoDateInTimezone } from "@/lib/date";
 import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
 import { sumCampaignTotals, safeRatio, safePercent } from "@/lib/agencia/metrics";
+import { goalProgressPct } from "@/lib/engine/metrics-registry";
+import { money, pct } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { AgenciaTabs } from "./tabs";
 import { VantGoalConfig } from "./vant-goal-config";
 
-const money = (n: number) =>
-  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
-const pct = (n: number | null) => (n === null ? "—" : `${n.toFixed(1)}%`);
+const pct1 = (n: number | null) => pct(n, 1);
 
 export default async function AgenciaPage() {
   const supabase = await createClient();
@@ -33,7 +33,7 @@ export default async function AgenciaPage() {
       supabase
         .from("vant_clients")
         .select(
-          "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend"
+          "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend, paused_at, cancelled_at"
         ),
     ]);
 
@@ -42,7 +42,7 @@ export default async function AgenciaPage() {
   const { data: vantGoal } = vantGoalId
     ? await supabase
         .from("goals")
-        .select("id, title, target_value, unit, deadline")
+        .select("id, title, target_value, baseline_value, unit, deadline")
         .eq("id", vantGoalId)
         .maybeSingle()
     : { data: null };
@@ -61,10 +61,10 @@ export default async function AgenciaPage() {
   const billing = computeBillingSummary(clients, today);
 
   const target = vantGoal?.target_value ? Number(vantGoal.target_value) : null;
-  const compliancePct = target ? Math.min(100, Math.round((billing.totalRevenue / target) * 100)) : null;
+  const baseline = vantGoal?.baseline_value !== null && vantGoal?.baseline_value !== undefined ? Number(vantGoal.baseline_value) : null;
+  const compliancePct = goalProgressPct(billing.totalRevenue, target, baseline);
   const remaining = target ? Math.max(0, target - billing.totalRevenue) : null;
 
-  const closingRate = safePercent(clients.length, totals.callsAttended);
 
   return (
     <main className="flex-1 px-6 md:px-8 py-6 max-w-6xl w-full mx-auto">
@@ -139,10 +139,10 @@ export default async function AgenciaPage() {
             <Stat label="Leads calificados" value={`${totals.qualifiedLeads}`} />
             <Stat label="Llamadas asistidas" value={`${totals.callsAttended}`} />
             <Stat label="CPL" value={totals.leads > 0 ? money(safeRatio(totals.spend, totals.leads) ?? 0) : "—"} />
-            <Stat label="Tasa de calificación" value={pct(safePercent(totals.qualifiedLeads, totals.leads))} />
-            <Stat label="Tasa de agendamiento" value={pct(safePercent(totals.callsScheduled, totals.qualifiedLeads))} />
-            <Stat label="Tasa de asistencia" value={pct(safePercent(totals.callsAttended, totals.callsScheduled))} />
-            <Stat label="Tasa de cierre" value={pct(closingRate)} />
+            <Stat label="Tasa de calificación" value={pct1(safePercent(totals.qualifiedLeads, totals.leads))} />
+            <Stat label="Tasa de agendamiento" value={pct1(safePercent(totals.callsScheduled, totals.qualifiedLeads))} />
+            <Stat label="Tasa de asistencia" value={pct1(safePercent(totals.callsAttended, totals.callsScheduled))} />
+            <Stat label="Llamadas agendadas" value={`${totals.callsScheduled}`} />
           </div>
         )}
       </Card>

@@ -11,9 +11,7 @@ import { DeleteButton } from "@/components/ui/delete-button";
 import { AgenciaTabs } from "../tabs";
 import { CreateVantClientButton } from "./create-button";
 import { EditVantClientButton } from "./edit-button";
-
-const money = (n: number) =>
-  n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+import { money } from "@/lib/format";
 
 const STATUS_TONE: Record<string, "good" | "warn" | "bad"> = {
   activo: "good",
@@ -35,7 +33,7 @@ export default async function VantClientsPage() {
   const { data } = await supabase
     .from("vant_clients")
     .select(
-      "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend"
+      "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend, paused_at, cancelled_at"
     )
     .order("start_date", { ascending: false });
 
@@ -73,7 +71,11 @@ export default async function VantClientsPage() {
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="min-w-0">
                     <div className="text-sm font-medium text-ink truncate">{c.name}</div>
-                    <div className="text-xs text-ink-dim mt-0.5">Desde {c.start_date}</div>
+                    <div className="text-xs text-ink-dim mt-0.5">
+                      Desde {c.start_date}
+                      {c.status === "cancelado" && c.cancelled_at ? ` · cancelado ${c.cancelled_at}` : ""}
+                      {c.status === "pausado" && c.paused_at ? ` · pausado ${c.paused_at}` : ""}
+                    </div>
                   </div>
                   <div className="flex items-center gap-2.5 flex-none">
                     <Badge tone={STATUS_TONE[c.status] ?? "neutral"}>{STATUS_LABEL[c.status] ?? c.status}</Badge>

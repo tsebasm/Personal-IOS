@@ -9,13 +9,38 @@ export type VantClient = {
   monthly_fee: number;
   additional_commission: number;
   ad_spend: number;
+  paused_at?: string | null;
+  cancelled_at?: string | null;
 };
 
-/** Meses transcurridos desde el inicio del cliente hasta hoy, contando el mes de inicio como 1. */
-export function monthsActiveSince(startDate: string, todayIso: string): number {
+/** Meses transcurridos desde el inicio del cliente hasta `endIso`, contando el mes de inicio como 1. */
+export function monthsActiveSince(startDate: string, endIso: string): number {
   const [sy, sm] = startDate.split("-").map(Number);
-  const [ty, tm] = todayIso.split("-").map(Number);
+  const [ty, tm] = endIso.split("-").map(Number);
   return Math.max(1, (ty - sy) * 12 + (tm - sm) + 1);
+}
+
+/**
+ * Último día en que el cliente generó facturación recurrente: la fecha de
+ * cancelación o pausa si aplica, si no hoy. Un cliente reactivado vuelve a
+ * status 'activo' y la acción de actualización limpia paused_at.
+ */
+export function billingEndDate(
+  client: Pick<VantClient, "status" | "paused_at" | "cancelled_at">,
+  todayIso: string
+): string {
+  const stop =
+    client.status === "cancelado" ? client.cancelled_at : client.status === "pausado" ? client.paused_at : null;
+  return stop && stop < todayIso ? stop : todayIso;
+}
+
+/** Meses efectivamente facturados: desde el inicio hasta la pausa/cancelación (o hoy). 0 si aún no inicia. */
+export function monthsBilled(
+  client: Pick<VantClient, "start_date" | "status" | "paused_at" | "cancelled_at">,
+  todayIso: string
+): number {
+  if (client.start_date > todayIso) return 0;
+  return monthsActiveSince(client.start_date, billingEndDate(client, todayIso));
 }
 
 /** Comisión mensual: % sobre la inversión publicitaria que gestiona VANT, o un valor fijo. */
@@ -32,9 +57,11 @@ export function monthlyRecurringRevenue(
   return client.monthly_fee + monthlyCommission(client) + client.additional_commission;
 }
 
-/** Facturación acumulada de un cliente desde su inicio hasta hoy: setup (una vez) + recurrente * meses. */
+/** Facturación acumulada de un cliente: setup (una vez) + recurrente * meses facturados. */
 export function totalClientRevenue(client: VantClient, todayIso: string): number {
-  return client.setup_fee + monthlyRecurringRevenue(client) * monthsActiveSince(client.start_date, todayIso);
+  const months = monthsBilled(client, todayIso);
+  if (months === 0) return 0;
+  return client.setup_fee + monthlyRecurringRevenue(client) * months;
 }
 
 function isSameMonth(dateIso: string, todayIso: string): boolean {
@@ -64,19 +91,19 @@ export function computeBillingSummary(clients: VantClient[], todayIso: string): 
   const revenueByClient: { id: string; name: string; revenue: number }[] = [];
 
   for (const client of clients) {
-    const months = monthsActiveSince(client.start_date, todayIso);
+    const months = monthsBilled(client, todayIso);
     const recurring = monthlyRecurringRevenue(client);
-    const revenue = client.setup_fee + recurring * months;
+    const revenue = totalClientRevenue(client, todayIso);
 
     totalRevenue += revenue;
-    setupRevenueTotal += client.setup_fee;
+    if (months > 0) setupRevenueTotal += client.setup_fee;
     monthlyFeesRevenueTotal += client.monthly_fee * months;
     commissionsRevenueTotal += (monthlyCommission(client) + client.additional_commission) * months;
-    adSpendTotal += client.ad_spend;
     revenueByClient.push({ id: client.id, name: client.name, revenue });
 
-    if (client.status === "activo") {
+    if (client.status === "activo" && months > 0) {
       activeClients += 1;
+      adSpendTotal += client.ad_spend; // solo la inversión que VANT gestiona hoy
       currentMonthRevenue += recurring;
       if (isSameMonth(client.start_date, todayIso)) currentMonthRevenue += client.setup_fee;
     }

@@ -52,9 +52,13 @@ export function CreateVantClientButton() {
               <Input id="client-additional" name="additional_commission" type="number" min="0" step="any" defaultValue={0} />
             </Field>
             <Field label="Inversión publicitaria" htmlFor="client-ad-spend">
-              <Input id="client-ad-spend" name="ad_spend" type="number" min="0" step="any" defaultValue={500000} />
+              <Input id="client-ad-spend" name="ad_spend" type="number" min="0" step="any" defaultValue={0} />
             </Field>
           </div>
+
+          <Field label="Fecha de pausa/cancelación (si aplica)" htmlFor="client-status-changed">
+            <Input id="client-status-changed" name="status_changed_on" type="date" />
+          </Field>
 
           {state.error && <p className="text-xs text-bad">{state.error}</p>}
 

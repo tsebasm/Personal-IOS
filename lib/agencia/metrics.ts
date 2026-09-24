@@ -81,33 +81,66 @@ export function sumCampaignTotals(
 export type ProspectingRates = {
   replyRate: number | null; // %
   schedulingRate: number | null; // %
+  showRate: number | null; // %
   closingRate: number | null; // %
 };
 
+/**
+ * Tasas del embudo outbound (definiciones en lib/engine/metrics-registry.ts).
+ * El cierre se mide sobre citas *asistidas*; si nunca se registró asistencia
+ * (sesiones anteriores a 0011), cae a citas agendadas para no perder el dato.
+ */
 export function computeProspectingRates(t: {
   contacts: number;
   replies: number;
   appointments: number;
+  shows?: number;
   closed: number;
 }): ProspectingRates {
+  const shows = t.shows ?? 0;
   return {
     replyRate: safePercent(t.replies, t.contacts),
     schedulingRate: safePercent(t.appointments, t.replies),
-    closingRate: safePercent(t.closed, t.appointments),
+    showRate: shows > 0 ? safePercent(shows, t.appointments) : null,
+    closingRate: safePercent(t.closed, shows > 0 ? shows : t.appointments),
   };
 }
 
+export type ProspectingTotals = {
+  contacts: number;
+  replies: number;
+  appointments: number;
+  shows: number;
+  proposals: number;
+  followups: number;
+  closed: number;
+  minutes: number;
+};
+
 export function sumProspectingTotals(
-  sessions: { contacts_count: number; replies_count: number; appointments_count: number; clients_closed: number }[]
-) {
-  return sessions.reduce(
+  sessions: {
+    contacts_count: number;
+    replies_count: number;
+    appointments_count: number;
+    clients_closed: number;
+    shows_count?: number | null;
+    proposals_count?: number | null;
+    followups_count?: number | null;
+    minutes_spent?: number | null;
+  }[]
+): ProspectingTotals {
+  return sessions.reduce<ProspectingTotals>(
     (acc, s) => ({
       contacts: acc.contacts + s.contacts_count,
       replies: acc.replies + s.replies_count,
       appointments: acc.appointments + s.appointments_count,
+      shows: acc.shows + (s.shows_count ?? 0),
+      proposals: acc.proposals + (s.proposals_count ?? 0),
+      followups: acc.followups + (s.followups_count ?? 0),
       closed: acc.closed + s.clients_closed,
+      minutes: acc.minutes + (s.minutes_spent ?? 0),
     }),
-    { contacts: 0, replies: 0, appointments: 0, closed: 0 }
+    { contacts: 0, replies: 0, appointments: 0, shows: 0, proposals: 0, followups: 0, closed: 0, minutes: 0 }
   );
 }
 

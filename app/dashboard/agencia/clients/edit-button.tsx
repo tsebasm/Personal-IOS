@@ -20,6 +20,8 @@ type Client = {
   monthly_fee: number;
   additional_commission: number;
   ad_spend: number;
+  paused_at?: string | null;
+  cancelled_at?: string | null;
 };
 
 export function EditVantClientButton({ client }: { client: Client }) {
@@ -84,6 +86,15 @@ export function EditVantClientButton({ client }: { client: Client }) {
               <Input id="edit-client-ad-spend" name="ad_spend" type="number" min="0" step="any" defaultValue={client.ad_spend} />
             </Field>
           </div>
+
+          <Field label="Fecha de pausa/cancelación (si aplica)" htmlFor="edit-client-status-changed">
+            <Input
+              id="edit-client-status-changed"
+              name="status_changed_on"
+              type="date"
+              defaultValue={client.cancelled_at ?? client.paused_at ?? ""}
+            />
+          </Field>
 
           {state.error && <p className="text-xs text-bad">{state.error}</p>}
 

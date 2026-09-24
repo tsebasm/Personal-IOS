@@ -7,6 +7,7 @@ const TABS = [
   { href: "/dashboard/agencia", label: "Dashboard" },
   { href: "/dashboard/agencia/campaigns", label: "Campañas" },
   { href: "/dashboard/agencia/prospecting", label: "Prospección" },
+  { href: "/dashboard/agencia/hypotheses", label: "Hipótesis" },
   { href: "/dashboard/agencia/clients", label: "Clientes" },
 ];
 
@@ -14,7 +15,7 @@ export function AgenciaTabs() {
   const pathname = usePathname();
 
   return (
-    <div className="flex items-center gap-1 border-b border-border mb-6 -mt-2">
+    <div className="flex items-center gap-1 border-b border-border mb-6 -mt-2 overflow-x-auto">
       {TABS.map((tab) => {
         const active = pathname === tab.href;
         return (

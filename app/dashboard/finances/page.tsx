@@ -7,8 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteButton } from "@/components/ui/delete-button";
 import { CreateTransactionButton } from "./create-button";
 import { EditTransactionButton } from "./edit-button";
-
-const money = (n: number) => n.toLocaleString("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 });
+import { money } from "@/lib/format";
 
 export default async function FinancesPage() {
   const supabase = await createClient();

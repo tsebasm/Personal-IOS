@@ -21,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: "Personal OS",
-  description: "Personal Operating System + Second Brain de Sebastián.",
+  description: "Personal Operating System + Second Brain.",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
