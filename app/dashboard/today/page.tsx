@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sun, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer } from "lucide-react";
+import { Sun, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer, Activity } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
@@ -13,6 +13,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { loadSerHacerTener } from "@/lib/data/ser-hacer-tener";
+import { loadAnalytics } from "@/lib/data/analytics";
 import { SerHacerTenerCard } from "./ser-hacer-tener";
 import { ResolveMissedButton, TaskDoneToggle } from "./task-controls";
 import { QuickTimeLog } from "@/components/quick-time-log";
@@ -29,8 +30,9 @@ export default async function TodayPage() {
   const supabase = await createClient();
   const { today, timezone, planCtx, capacity, ranking, missed, doneToday, outreachQuota, contactsToday } = ctx;
 
-  const [sht, { data: eventsData }] = await Promise.all([
+  const [sht, analytics, { data: eventsData }] = await Promise.all([
     loadSerHacerTener(),
+    loadAnalytics(),
     supabase
       .from("calendar_events")
       .select("id, title, starts_at")
@@ -90,6 +92,30 @@ export default async function TodayPage() {
             )}
           </div>
         </Card>
+
+        {/* QUÉ CAMBIÓ ------------------------------------------------------ */}
+        {analytics && (
+          <Card>
+            <CardHeader title="¿Qué cambió desde ayer?" icon={<Activity size={16} className="text-ink-dim" />} />
+            <div className="px-5 pb-4 text-sm">
+              {analytics.dayDiff.length === 0 ? (
+                <p className="text-xs text-ink-dim">Sin cambios registrados todavía hoy frente a ayer.</p>
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {analytics.dayDiff.map((d) => (
+                    <li key={d.key} className="flex justify-between gap-3 text-xs">
+                      <span className="text-ink">{d.label}</span>
+                      <span className="tabular-nums text-ink-dim">
+                        ayer {d.key === "revenue" ? money(d.yesterday) : d.yesterday} → hoy{" "}
+                        <span className={d.delta > 0 ? "text-good" : "text-warn"}>{d.key === "revenue" ? money(d.today) : d.today}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </Card>
+        )}
 
         {/* CAPACIDAD ------------------------------------------------------- */}
         <Card>

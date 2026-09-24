@@ -59,13 +59,17 @@ export async function updateReview(_prev: ActionState, formData: FormData): Prom
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   const d = parsed.data;
 
+  // Solo se actualiza la nota: el snapshot semanal y el check-in diario se conservan.
+  const { data: existing } = await supabase.from("reviews").select("content").eq("id", id).maybeSingle();
+  const prev = (existing?.content ?? {}) as Record<string, unknown>;
+  const { note: _oldNote, ...rest } = prev;
   const { error } = await supabase
     .from("reviews")
     .update({
       type: d.type,
       period_start: d.period_start,
       period_end: d.period_end,
-      content: d.note ? { note: d.note } : {},
+      content: d.note ? { ...rest, note: d.note } : rest,
     })
     .eq("id", id);
   if (error) return { ok: false, error: "No pudimos actualizar la revisión." };
