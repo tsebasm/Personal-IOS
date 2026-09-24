@@ -41,3 +41,26 @@ export function friendlyDate(timezone: string, date = new Date()): string {
   ).getDay();
   return `${DIAS[weekdayIdx]}, ${Number(get("day"))} de ${MESES[Number(get("month")) - 1]}`;
 }
+
+/**
+ * Instante UTC (ISO) en que empieza el día `isoDate` en `timezone`. Para
+ * filtrar timestamptz por "hoy del usuario" — `${date}T00:00:00` sería
+ * medianoche UTC, 5 h antes de la medianoche de Bogotá.
+ */
+export function startOfDayInTimezone(isoDate: string, timezone: string): string {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const guess = Date.UTC(y, m - 1, d);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+  }).formatToParts(new Date(guess));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+  const asLocal = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"));
+  const offset = asLocal - guess; // ms que la zona va por delante de UTC
+  return new Date(guess - offset).toISOString();
+}

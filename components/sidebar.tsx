@@ -2,48 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  LayoutGrid,
-  Sun,
-  CheckSquare,
-  FolderKanban,
-  Target,
-  Repeat,
-  BookOpen,
-  Wallet,
-  RefreshCw,
-  Sparkles,
-  Building2,
-  Plus,
-  MessageCircle,
-  Crosshair,
-} from "lucide-react";
+import { Plus } from "lucide-react";
+import { NAV, isNavActive } from "@/components/nav";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ModeToggle } from "@/components/mode-toggle";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-};
-
-const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/dashboard/asistente", label: "Asistente", icon: MessageCircle },
-  { href: "/dashboard/today", label: "Hoy", icon: Sun },
-  { href: "/dashboard/plan", label: "Plan", icon: Crosshair },
-  { href: "/dashboard/tasks", label: "Tareas", icon: CheckSquare },
-  { href: "/dashboard/projects", label: "Proyectos", icon: FolderKanban },
-  { href: "/dashboard/goals", label: "Metas", icon: Target },
-  { href: "/dashboard/habits", label: "Hábitos", icon: Repeat },
-  { href: "/dashboard/knowledge", label: "Conocimiento", icon: BookOpen },
-  { href: "/dashboard/agencia", label: "Agencia", icon: Building2 },
-  { href: "/dashboard/finances", label: "Finanzas", icon: Wallet },
-  { href: "/dashboard/reviews", label: "Revisiones", icon: RefreshCw },
-  { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
-];
 
 export function Sidebar({
   areas,
@@ -91,10 +55,7 @@ export function Sidebar({
       </div>
       <nav className="flex flex-col gap-0.5">
         {NAV.map((item) => {
-          const active =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname === item.href || pathname.startsWith(`${item.href}/`);
+          const active = isNavActive(item.href, pathname);
           const Icon = item.icon;
           return (
             <Link

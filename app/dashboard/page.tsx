@@ -25,6 +25,7 @@ import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
 import { goalProgressPct } from "@/lib/engine/metrics-registry";
 import { money, pct } from "@/lib/format";
 import { loadPlanContext } from "@/lib/data/plan";
+import { loadTodayContext } from "@/lib/data/today";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -32,7 +33,6 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 
 
-const PRIORITY_RANK: Record<string, number> = { alta: 0, media: 1, baja: 2 };
 const PRIORITY_TONE: Record<string, "bad" | "warn" | "neutral"> = {
   alta: "bad",
   media: "warn",
@@ -263,16 +263,8 @@ export default async function DashboardPage() {
     calendarEvents.length > 0 ||
     weekTasks.length > 0;
 
-  const priorityTasks = [...priorityCandidates]
-    .sort((a, b) => {
-      const aToday = a.scheduled_date === today || (a.deadline && a.deadline <= today) ? 0 : 1;
-      const bToday = b.scheduled_date === today || (b.deadline && b.deadline <= today) ? 0 : 1;
-      if (aToday !== bToday) return aToday - bToday;
-      const rankDiff = (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3);
-      if (rankDiff !== 0) return rankDiff;
-      return (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999");
-    })
-    .slice(0, 4);
+  // Mismo motor que /dashboard/today (lib/engine/priority.ts): una sola lógica de prioridad.
+  const priorityTasks = (await loadTodayContext())?.ranking.top ?? [];
 
   const weekDays = Array.from({ length: 7 }, (_, i) => shiftIsoDate(weekStart, i));
   const weeklyProgress = weekDays.map((day) => {
@@ -475,7 +467,7 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader
-            title="Tareas prioritarias"
+            title="Prioridades de hoy"
             icon={<ListTodo size={16} className="text-ink-dim" />}
             action={
               priorityTasks.length > 0 ? <Badge tone="ink">{priorityTasks.length}</Badge> : undefined
@@ -485,21 +477,21 @@ export default async function DashboardPage() {
             <EmptyState title="Sin tareas pendientes" description="Todo al día por ahora." />
           ) : (
             <ul className="px-5 pb-3 flex flex-col gap-1">
-              {priorityTasks.map((t) => (
-                <li key={t.id} className="flex items-center justify-between gap-2 py-1.5">
-                  <span className="text-sm text-ink truncate">{t.title}</span>
-                  <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>
-                    {t.scheduled_date === today ? "Hoy" : t.deadline ?? ""}
-                  </Badge>
+              {priorityTasks.map((s, i) => (
+                <li key={s.item.id} className="flex items-center justify-between gap-2 py-1.5">
+                  <span className="text-sm text-ink truncate">
+                    {i + 1}. {s.item.title}
+                  </span>
+                  <Badge tone={PRIORITY_TONE[s.item.priority] ?? "neutral"}>score {s.score}</Badge>
                 </li>
               ))}
             </ul>
           )}
           <Link
-            href="/dashboard/tasks"
+            href="/dashboard/today"
             className="block px-5 py-3 text-xs font-medium text-ink-dim hover:text-ink border-t border-border"
           >
-            Ver todas
+            Ver por qué, en Hoy
           </Link>
         </Card>
 
