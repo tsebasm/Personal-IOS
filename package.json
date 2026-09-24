@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "seed:reset": "node --env-file=.env.local scripts/seed-reset.mjs",
-    "test": "vitest run"
+    "test": "vitest run",
+    "export:obsidian": "node --env-file=.env.local scripts/export-obsidian.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",
