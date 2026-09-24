@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { isoDateInTimezone, shiftIsoDate, friendlyDate } from "@/lib/date";
-import { computeStreak } from "@/lib/metrics";
+import { computeHabitCompliance } from "@/lib/engine/habits";
 import {
   computeProspectingRates,
   sumProspectingTotals,
@@ -80,7 +80,7 @@ export default async function DashboardPage() {
     description: string | null;
     deadline: string | null;
   }[] = [];
-  let habits: { id: string; title: string }[] = [];
+  let habits: { id: string; title: string; frequency: string; target_per_period: number; days_of_week: number[] | null }[] = [];
   let habitLogs: { habit_id: string; date: string; done: boolean }[] = [];
   let calendarEvents: { id: string; title: string; starts_at: string }[] = [];
   let projectTaskStats: { project_id: string | null; status: string }[] = [];
@@ -116,7 +116,7 @@ export default async function DashboardPage() {
         .eq("status", "activo")
         .order("deadline", { ascending: true, nullsFirst: false })
         .limit(4),
-      supabase.from("habits").select("id, title").eq("is_active", true).order("created_at"),
+      supabase.from("habits").select("id, title, frequency, target_per_period, days_of_week").eq("is_active", true).order("created_at"),
       supabase
         .from("habit_logs")
         .select("habit_id, date, done")
@@ -253,8 +253,9 @@ export default async function DashboardPage() {
     if (!habitLogsByHabit.has(log.habit_id)) habitLogsByHabit.set(log.habit_id, new Set());
     habitLogsByHabit.get(log.habit_id)!.add(log.date);
   }
-  const habitStreaks = habits.map((h) => computeStreak(habitLogsByHabit.get(h.id) ?? new Set(), today));
-  const bestStreak = habitStreaks.length > 0 ? Math.max(...habitStreaks) : null;
+  // Racha según la frecuencia real de cada hábito (diaria / días específicos / N por semana).
+  const habitCompliance = habits.map((h) => computeHabitCompliance(h, habitLogsByHabit.get(h.id) ?? new Set(), today, 7));
+  const bestStreak = habitCompliance.reduce<{ streak: number; streakUnit: string } | null>((best, c) => (!best || c.streak > best.streak ? c : best), null);
 
   const hasAnyData =
     priorityCandidates.length > 0 ||
@@ -343,7 +344,7 @@ export default async function DashboardPage() {
           <MetricCard
             icon={<Flame size={16} />}
             label="Racha de hábitos"
-            value={bestStreak !== null ? `${bestStreak} días` : "—"}
+            value={bestStreak !== null ? `${bestStreak.streak} ${bestStreak.streakUnit}` : "—"}
             hint={habits.length === 0 ? "Sin hábitos activos" : undefined}
           />
         </div>
@@ -538,7 +539,7 @@ export default async function DashboardPage() {
                   <li key={h.id} className="flex items-center justify-between gap-2">
                     <span className="text-sm text-ink truncate">{h.title}</span>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-dim tabular-nums">{habitStreaks[i]}d</span>
+                      <span className="text-xs text-ink-dim tabular-nums">{habitCompliance[i].streak}{habitCompliance[i].streakUnit === "semanas" ? "sem" : "d"}</span>
                       <span
                         className={`h-2 w-2 rounded-full ${done ? "bg-good" : "bg-surface-2 border border-border"}`}
                       />

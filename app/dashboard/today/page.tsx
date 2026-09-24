@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sun, Repeat, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer } from "lucide-react";
+import { Sun, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
@@ -12,7 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
-import { HabitTodayToggle } from "./habit-toggle";
+import { loadSerHacerTener } from "@/lib/data/ser-hacer-tener";
+import { SerHacerTenerCard } from "./ser-hacer-tener";
 import { ResolveMissedButton, TaskDoneToggle } from "./task-controls";
 import { QuickTimeLog } from "@/components/quick-time-log";
 
@@ -28,9 +29,8 @@ export default async function TodayPage() {
   const supabase = await createClient();
   const { today, timezone, planCtx, capacity, ranking, missed, doneToday, outreachQuota, contactsToday } = ctx;
 
-  const [{ data: habitsData }, { data: logsData }, { data: eventsData }] = await Promise.all([
-    supabase.from("habits").select("id, title").eq("is_active", true),
-    supabase.from("habit_logs").select("habit_id, done").eq("date", today),
+  const [sht, { data: eventsData }] = await Promise.all([
+    loadSerHacerTener(),
     supabase
       .from("calendar_events")
       .select("id, title, starts_at")
@@ -38,8 +38,6 @@ export default async function TodayPage() {
       .lt("starts_at", startOfDayInTimezone(shiftIsoDate(today, 1), timezone))
       .order("starts_at"),
   ]);
-  const habits = habitsData ?? [];
-  const doneHabitIds = new Set((logsData ?? []).filter((l) => l.done).map((l) => l.habit_id));
   const events = eventsData ?? [];
 
   const plan = planCtx?.plan ?? null;
@@ -224,22 +222,8 @@ export default async function TodayPage() {
           </div>
         </Card>
 
-        {/* HÁBITOS + AGENDA ------------------------------------------------ */}
-        <Card>
-          <CardHeader title="Hábitos" icon={<Repeat size={16} className="text-ink-dim" />} />
-          {habits.length === 0 ? (
-            <EmptyState title="Sin hábitos activos" />
-          ) : (
-            <ul className="px-5 pb-4 flex flex-col gap-2">
-              {habits.map((h) => (
-                <li key={h.id} className="flex items-center justify-between gap-2">
-                  <span className="text-sm text-ink">{h.title}</span>
-                  <HabitTodayToggle habitId={h.id} date={today} done={doneHabitIds.has(h.id)} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        {/* SER → HACER → TENER --------------------------------------------- */}
+        {sht && <SerHacerTenerCard data={sht} today={today} />}
 
         <Card>
           <CardHeader title="Agenda" icon={<Calendar size={16} className="text-ink-dim" />} />
