@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sun, Repeat, Calendar, Target, Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Sun, Repeat, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { LinkButton } from "@/components/ui/link-button";
 import { HabitTodayToggle } from "./habit-toggle";
 import { ResolveMissedButton, TaskDoneToggle } from "./task-controls";
+import { QuickTimeLog } from "@/components/quick-time-log";
 
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60 ? `${min % 60}m` : ""}`.trim() : `${min}m`);
 
@@ -207,6 +208,21 @@ export default async function TodayPage() {
             </ul>
           </Card>
         )}
+
+        <Card>
+          <CardHeader
+            title="Registrar tiempo"
+            icon={<Timer size={16} className="text-ink-dim" />}
+            action={
+              <Link href="/dashboard/time" className="text-xs text-ink-dim hover:text-ink">
+                Ver semana
+              </Link>
+            }
+          />
+          <div className="px-5 pb-5">
+            <QuickTimeLog today={today} />
+          </div>
+        </Card>
 
         {/* HÁBITOS + AGENDA ------------------------------------------------ */}
         <Card>

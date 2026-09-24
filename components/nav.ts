@@ -13,6 +13,7 @@ import {
   MessageCircle,
   Crosshair,
   Clock,
+  Timer,
 } from "lucide-react";
 
 export type NavItem = {
@@ -27,6 +28,7 @@ export const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/plan", label: "Plan", icon: Crosshair },
   { href: "/dashboard/capacity", label: "Capacidad", icon: Clock },
+  { href: "/dashboard/time", label: "Tiempo", icon: Timer },
   { href: "/dashboard/asistente", label: "Asistente", icon: MessageCircle },
   { href: "/dashboard/tasks", label: "Tareas", icon: CheckSquare },
   { href: "/dashboard/projects", label: "Proyectos", icon: FolderKanban },
