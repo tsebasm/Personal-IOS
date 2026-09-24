@@ -11,7 +11,8 @@
     "seed": "node --env-file=.env.local scripts/seed.mjs",
     "seed:reset": "node --env-file=.env.local scripts/seed-reset.mjs",
     "test": "vitest run",
-    "export:obsidian": "node --env-file=.env.local scripts/export-obsidian.mjs"
+    "export:obsidian": "node --env-file=.env.local scripts/export-obsidian.mjs",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",

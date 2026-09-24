@@ -5,6 +5,10 @@ on:
     branches: [main, dev]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -18,3 +22,9 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
+      # Todas las rutas son dinámicas y leen Supabase solo por request: el
+      # build no necesita credenciales reales, solo que existan las variables.
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ci-placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
