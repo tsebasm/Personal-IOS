@@ -16,6 +16,7 @@ import {
   Building2,
   Plus,
   MessageCircle,
+  Crosshair,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -32,6 +33,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/asistente", label: "Asistente", icon: MessageCircle },
   { href: "/dashboard/today", label: "Hoy", icon: Sun },
+  { href: "/dashboard/plan", label: "Plan", icon: Crosshair },
   { href: "/dashboard/tasks", label: "Tareas", icon: CheckSquare },
   { href: "/dashboard/projects", label: "Proyectos", icon: FolderKanban },
   { href: "/dashboard/goals", label: "Metas", icon: Target },

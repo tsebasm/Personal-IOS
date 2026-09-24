@@ -24,6 +24,7 @@ import {
 import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
 import { goalProgressPct } from "@/lib/engine/metrics-registry";
 import { money, pct } from "@/lib/format";
+import { loadPlanContext } from "@/lib/data/plan";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -178,7 +179,7 @@ export default async function DashboardPage() {
     baselineValue: number | null;
     revenue: number;
     milestone: VantMilestoneGoal | null;
-    dailyTarget: number | null;
+    dailyTarget: { value: number; source: "manual" | "calculated" } | null;
     contactsToday: number;
     rates: ReturnType<typeof computeProspectingRates>;
   } | null = null;
@@ -187,7 +188,7 @@ export default async function DashboardPage() {
     const thirtyDaysAgo = shiftIsoDate(today, -30);
     const [{ data: settings }, { data: goalsData }, { data: sessionsData }, { data: clientsData }] =
       await Promise.all([
-        supabase.from("agencia_settings").select("vant_goal_id, daily_outreach_target").maybeSingle(),
+        supabase.from("agencia_settings").select("vant_goal_id").maybeSingle(),
         supabase.from("goals").select("id, title, parent_goal_id, status, deadline, target_value, baseline_value"),
         supabase
           .from("prospecting_sessions")
@@ -224,7 +225,8 @@ export default async function DashboardPage() {
         // la misma definición que usa /dashboard/agencia.
         revenue: computeBillingSummary(clients, today).totalRevenue,
         milestone: nextVantMilestone(goalsList, vantGoalId),
-        dailyTarget: settings?.daily_outreach_target ?? null,
+        // Override manual de Agencia si existe; si no, la cuota que calcula el plan (Fase 2).
+        dailyTarget: (await loadPlanContext())?.dailyOutreachTarget ?? null,
         contactsToday: sessions.filter((s) => s.date === today).reduce((sum, s) => sum + s.contacts_count, 0),
         rates: computeProspectingRates(sumProspectingTotals(sessions)),
       };
@@ -404,23 +406,25 @@ export default async function DashboardPage() {
               </div>
 
               <div>
-                <div className="text-xs text-ink-dim mb-1">Mensajes en frío hoy</div>
+                <div className="text-xs text-ink-dim mb-1">
+                  Contactos en frío hoy{vantData.dailyTarget?.source === "calculated" ? " (cuota calculada)" : ""}
+                </div>
                 {vantData.dailyTarget ? (
                   <>
                     <div className="text-sm font-semibold text-ink tabular-nums">
-                      {vantData.contactsToday} / {vantData.dailyTarget}
+                      {vantData.contactsToday} / {vantData.dailyTarget.value}
                     </div>
                     <ProgressBar
-                      value={Math.min(100, Math.round((vantData.contactsToday / vantData.dailyTarget) * 100))}
+                      value={Math.min(100, Math.round((vantData.contactsToday / vantData.dailyTarget.value) * 100))}
                       className="mt-1.5"
                     />
                   </>
                 ) : (
                   <Link
-                    href="/dashboard/agencia"
+                    href="/dashboard/plan"
                     className="text-xs text-ink-dim underline underline-offset-2 hover:text-ink"
                   >
-                    Configura tu meta diaria
+                    Completa el plan para calcular la cuota
                   </Link>
                 )}
               </div>
