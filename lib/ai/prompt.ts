@@ -1,14 +1,21 @@
 import type { MasterContext } from "./context";
 
-const GROUNDING_RULES = `Eres el asistente de System IOS, el sistema operativo personal de {NAME}. Tu trabajo es ayudarle a mantenerse alineado con sus metas reales — personales y de su agencia VANT — entendiendo su situación actual y ayudándole a priorizar.
+const GROUNDING_RULES = `Eres el asistente ejecutivo del Personal OS de {NAME}: un sistema que convierte metas en acciones medibles. Tu trabajo es responder con base en datos: ¿qué debo hacer hoy y por qué?, ¿qué métrica bloquea la meta?, ¿qué cambió?, ¿qué hipótesis probar?, ¿estoy ejecutando el plan?
 
-Reglas estrictas, no negociables:
-1. Solo puedes afirmar cosas respaldadas por el CONTEXTO REAL de abajo. Si algo no está ahí, no lo inventes ni lo asumas.
-2. Si te falta información para responder algo con seguridad, dilo explícitamente: "No tengo suficiente información para determinar esto" — y si aplica, pregúntalo.
-3. Nunca des una recomendación genérica de productividad sin conectarla a una meta, proyecto o dato concreto del contexto. Si no hay ningún dato con el que conectarla, no la des.
-4. No cambies ni des por hecho un cambio a una meta existente sin que el usuario lo confirme explícitamente en la conversación — tú propones, él aprueba.
-5. Cuando estés indagando la situación del usuario, haz una pregunta a la vez — no listes varias preguntas de golpe.
-6. Sé directo y breve. Nada de relleno motivacional genérico.`;
+Reglas no negociables:
+1. Solo afirmas lo que está en el CONTEXTO de abajo. Si falta información, dilo y nombra exactamente qué dato falta (y dónde registrarlo en el sistema). No inventes.
+2. Los números ya vienen calculados por los motores del sistema (plan, prioridades, cuello de botella). No los recalcules ni los cambies: interprétalos y cítalos.
+3. Distingue siempre DATO, SUPOSICIÓN, HIPÓTESIS y DECISIÓN. Nunca presentes una hipótesis ni una ESTIMACIÓN como hecho.
+4. Toda recomendación sigue este formato, cada parte en su línea:
+   OBSERVACIÓN: el dato que la justifica (con su etiqueta de origen).
+   HIPÓTESIS: posible causa, marcada como no comprobada (o "ninguna").
+   ACCIÓN: qué hacer, concreta y ejecutable hoy o esta semana.
+   MÉTRICA: cómo se evaluará.
+   DECISIÓN: el criterio para mantener o cambiar según el resultado.
+5. Nada de consejos genéricos de productividad ni relleno motivacional. Si no puedes conectar algo a una meta o dato del contexto, no lo digas.
+6. No cambias metas ni datos: propones; el usuario decide.
+7. Si preguntas algo para completar información, una pregunta a la vez.
+8. La primera línea de tu respuesta es exactamente "TIPO: " seguido de una de: dato, suposicion, hipotesis, decision, resultado, recomendacion — la que mejor describa tu respuesta. Luego una línea en blanco y la respuesta.`;
 
 function formatGoals(context: MasterContext): string {
   if (context.goals.length === 0) return "Ninguna meta registrada todavía.";
@@ -87,8 +94,12 @@ function formatAgencia(context: MasterContext): string {
   return lines.join("\n");
 }
 
-export function buildSystemPrompt(context: MasterContext): string {
-  const name = context.profile.fullName ?? "el usuario";
+/** Reglas estables (se cachean): no dependen de los datos del día. */
+export function buildRules(context: MasterContext): string {
+  return GROUNDING_RULES.replace("{NAME}", context.profile.fullName ?? "el usuario");
+}
+
+export function buildContextPrompt(context: MasterContext, engineContext: string): string {
   const vision = context.vision?.statement
     ? context.vision.statement
     : "Vacío — todavía no ha definido su visión/identidad/principios en el sistema.";
@@ -106,7 +117,8 @@ export function buildSystemPrompt(context: MasterContext): string {
       ? context.recentReviews.map((r) => `${r.type} (${r.period_start} a ${r.period_end})`).join(", ")
       : "Ninguna revisión registrada todavía.";
 
-  return `${GROUNDING_RULES.replace("{NAME}", name)}
+  return `CONCLUSIONES DE LOS MOTORES (calculadas por el sistema, no por ti):
+${engineContext}
 
 CONTEXTO REAL (Supabase, a fecha de hoy — zona horaria ${context.profile.timezone}):
 
@@ -126,4 +138,16 @@ Hábitos activos: ${habits}
 Tareas de hoy: ${tasksToday}
 
 Revisiones recientes: ${reviews}`;
+}
+
+export const MESSAGE_TYPES = ["dato", "suposicion", "hipotesis", "decision", "resultado", "recomendacion"] as const;
+export type AssistantMessageType = (typeof MESSAGE_TYPES)[number];
+
+/** Separa la línea "TIPO: x" que exige la regla 8. Si falta o es inválida, el tipo queda null. */
+export function parseMessageType(text: string): { type: AssistantMessageType | null; body: string } {
+  const match = text.match(/^\s*TIPO:\s*([a-záéíóú]+)[^\S\n]*\n?/i);
+  if (!match) return { type: null, body: text.trim() };
+  const raw = match[1].toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const type = (MESSAGE_TYPES as readonly string[]).includes(raw) ? (raw as AssistantMessageType) : null;
+  return { type, body: text.slice(match[0].length).trim() };
 }

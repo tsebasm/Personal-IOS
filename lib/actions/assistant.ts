@@ -4,14 +4,15 @@ import Anthropic from "@anthropic-ai/sdk";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildMasterContext } from "@/lib/ai/context";
-import { buildSystemPrompt } from "@/lib/ai/prompt";
+import { buildContextPrompt, buildRules, parseMessageType } from "@/lib/ai/prompt";
+import { buildEngineContext } from "@/lib/ai/engine-context";
 import { getAnthropic, ASSISTANT_MODEL } from "@/lib/ai/client";
 
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  message_type: "hecho" | "inferencia" | "recomendacion" | null;
+  message_type: string | null;
   created_at: string;
 };
 
@@ -65,6 +66,11 @@ export async function loadConversation(): Promise<
   return { conversationId: conv.id, messages: (messages ?? []) as ChatMessage[] };
 }
 
+/** Últimos N mensajes que se envían al modelo: el costo/latencia no crece sin cota con la conversación. */
+const HISTORY_LIMIT = 20;
+/** Tope de mensajes del usuario por minuto (evita loops de UI que disparen costo). */
+const RATE_LIMIT_PER_MINUTE = 6;
+
 export async function sendAssistantMessage(conversationId: string, text: string): Promise<SendMessageResult> {
   const message = text.trim();
   if (!message) return { ok: false, error: "Escribe algo antes de enviar." };
@@ -73,7 +79,6 @@ export async function sendAssistantMessage(conversationId: string, text: string)
   if (!anthropic) {
     return { ok: false, error: "Falta ANTHROPIC_API_KEY en el entorno (.env.local o Vercel)." };
   }
-
 
   const supabase = await createClient();
   const {
@@ -89,6 +94,15 @@ export async function sendAssistantMessage(conversationId: string, text: string)
     .maybeSingle();
   if (!conversation) return { ok: false, error: "Conversación inválida." };
 
+  const { count: recent } = await supabase
+    .from("ai_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "user")
+    .gte("created_at", new Date(Date.now() - 60_000).toISOString());
+  if ((recent ?? 0) >= RATE_LIMIT_PER_MINUTE) {
+    return { ok: false, error: "Demasiados mensajes en un minuto. Espera un momento." };
+  }
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, timezone")
@@ -102,37 +116,43 @@ export async function sendAssistantMessage(conversationId: string, text: string)
   });
   if (insertUserErr) return { ok: false, error: "No pudimos guardar tu mensaje." };
 
-  const { data: history, error: historyErr } = await supabase
+  const { data: latest, error: historyErr } = await supabase
     .from("ai_messages")
     .select("role, content")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true });
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_LIMIT);
   if (historyErr) return { ok: false, error: "No pudimos leer el historial." };
+  // La API exige empezar con un mensaje del usuario.
+  const history = (latest ?? []).reverse();
+  while (history.length > 0 && history[0].role !== "user") history.shift();
 
-  const context = await buildMasterContext(
-    supabase,
-    user.id,
-    profile?.timezone ?? "America/Bogota",
-    profile?.full_name ?? null
-  );
-  const systemPrompt = buildSystemPrompt(context);
+  const [context, engineContext] = await Promise.all([
+    buildMasterContext(supabase, user.id, profile?.timezone ?? "America/Bogota", profile?.full_name ?? null),
+    buildEngineContext(),
+  ]);
 
-  let assistantText: string;
+  let rawText: string;
   try {
     const response = await anthropic.messages.create({
       model: ASSISTANT_MODEL,
-      max_tokens: 1500,
-      system: systemPrompt,
-      messages: (history ?? []).map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      })),
+      max_tokens: 4000,
+      // Reglas (estables) + contexto (cambia con los datos). El breakpoint va al final
+      // del system para que turnos seguidos del mismo chat reutilicen el prefijo cacheado.
+      system: [
+        { type: "text", text: buildRules(context) },
+        { type: "text", text: buildContextPrompt(context, engineContext), cache_control: { type: "ephemeral" } },
+      ],
+      messages: history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
     });
+    if (response.stop_reason === "refusal") {
+      return { ok: false, error: "El asistente no pudo responder a este mensaje. Reformúlalo." };
+    }
     const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-    assistantText = textBlock?.text ?? "No pude generar una respuesta.";
+    rawText = textBlock?.text ?? "No pude generar una respuesta.";
   } catch (err) {
     if (err instanceof Anthropic.AuthenticationError) {
-      return { ok: false, error: "ANTHROPIC_API_KEY inválida o ausente en .env.local." };
+      return { ok: false, error: "ANTHROPIC_API_KEY inválida o ausente." };
     }
     if (err instanceof Anthropic.RateLimitError) {
       return { ok: false, error: "Límite de la API alcanzado — intenta de nuevo en un momento." };
@@ -143,11 +163,13 @@ export async function sendAssistantMessage(conversationId: string, text: string)
     return { ok: false, error: "No pudimos contactar al asistente." };
   }
 
-  const { error: insertAssistantErr } = await supabase.from("ai_messages").insert({
-    conversation_id: conversationId,
-    role: "assistant",
-    content: assistantText,
-  });
+  const { type, body } = parseMessageType(rawText);
+  const row = { conversation_id: conversationId, role: "assistant", content: body || rawText, message_type: type };
+  let { error: insertAssistantErr } = await supabase.from("ai_messages").insert(row);
+  // Sin la migración 0016 el check solo admite los tipos viejos: guardar sin tipo antes que perder la respuesta.
+  if (insertAssistantErr?.code === "23514") {
+    ({ error: insertAssistantErr } = await supabase.from("ai_messages").insert({ ...row, message_type: null }));
+  }
   if (insertAssistantErr) return { ok: false, error: "La respuesta llegó pero no se pudo guardar." };
 
   await supabase.from("ai_conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversationId);
@@ -161,4 +183,25 @@ export async function sendAssistantMessage(conversationId: string, text: string)
 
   revalidatePath("/dashboard/asistente");
   return { ok: true, conversationId, messages: (messages ?? []) as ChatMessage[] };
+}
+
+/**
+ * Borra el historial de esta conversación (pedido explícito del usuario
+ * desde la UI). Solo mensajes del chat; no toca metas ni datos.
+ */
+export async function clearConversation(conversationId: string): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Debes iniciar sesión." };
+
+  const { error } = await supabase
+    .from("ai_messages")
+    .delete()
+    .eq("conversation_id", conversationId)
+    .eq("user_id", user.id);
+  if (error) return { ok: false, error: "No pudimos borrar el historial." };
+  revalidatePath("/dashboard/asistente");
+  return { ok: true };
 }
