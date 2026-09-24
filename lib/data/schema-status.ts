@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
  * Cada prueba lee una columna/tabla que introduce esa migración (limit 0).
  */
 const PROBES: { file: string; table: string; column: string }[] = [
+  { file: "0008_ai_assistant.sql + 0009_ai_assistant_rls.sql", table: "ai_messages", column: "id" },
   { file: "0010_agencia_daily_target.sql", table: "agencia_settings", column: "daily_outreach_target" },
   { file: "0011_foundation.sql", table: "hypotheses", column: "id" },
   { file: "0012_plan_assumptions.sql", table: "agencia_settings", column: "funnel_assumptions" },

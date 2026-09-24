@@ -25,12 +25,13 @@ describe("migraciones", () => {
     }
   });
 
-  it("el banner de migraciones pendientes conoce cada migración desde la 0010 que agrega tablas/columnas", () => {
+  it("el banner de migraciones pendientes conoce cada migración desde la 0008 que agrega tablas/columnas", () => {
     const status = fs.readFileSync(path.join(__dirname, "..", "lib", "data", "schema-status.ts"), "utf8");
     const probed = new Set([...status.matchAll(/file: "(\d{4})_/g)].map((m) => m[1]));
+    // 0009 es RLS de 0008 (se reportan juntas);
     // 0016 solo cambia un CHECK: no se puede sondear con un select y tiene fallback en el código.
-    const exempt = new Set(["0016"]);
-    for (const f of files.filter((x) => Number(x.slice(0, 4)) >= 10)) {
+    const exempt = new Set(["0009", "0016"]);
+    for (const f of files.filter((x) => Number(x.slice(0, 4)) >= 8)) {
       const n = f.slice(0, 4);
       if (!exempt.has(n)) expect(probed.has(n), `${f} sin sonda en schema-status.ts`).toBe(true);
     }
