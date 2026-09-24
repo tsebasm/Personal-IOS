@@ -1,4 +1,5 @@
 import { createBrowserClient } from "@supabase/ssr";
+import { readSupabaseEnv } from "./env";
 
 /**
  * Browser-side Supabase client. Safe to call from Client Components — it
@@ -7,8 +8,9 @@ import { createBrowserClient } from "@supabase/ssr";
  * key alone never grants access to another user's rows.
  */
 export function createClient() {
+  const { url, key } = readSupabaseEnv();
   return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    url,
+    key
   );
 }

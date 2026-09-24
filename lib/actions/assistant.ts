@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { buildMasterContext } from "@/lib/ai/context";
 import { buildSystemPrompt } from "@/lib/ai/prompt";
-import { anthropic, ASSISTANT_MODEL } from "@/lib/ai/client";
+import { getAnthropic, ASSISTANT_MODEL } from "@/lib/ai/client";
 
 export type ChatMessage = {
   id: string;
@@ -69,6 +69,11 @@ export async function sendAssistantMessage(conversationId: string, text: string)
   const message = text.trim();
   if (!message) return { ok: false, error: "Escribe algo antes de enviar." };
   if (message.length > 4000) return { ok: false, error: "Mensaje demasiado largo (máx. 4000 caracteres)." };
+  const anthropic = getAnthropic();
+  if (!anthropic) {
+    return { ok: false, error: "Falta ANTHROPIC_API_KEY en el entorno (.env.local o Vercel)." };
+  }
+
 
   const supabase = await createClient();
   const {

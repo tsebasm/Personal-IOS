@@ -1,5 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
+import { readSupabaseEnv, type SupabaseEnv } from "./env";
 
 const PUBLIC_PATHS = ["/login", "/signup", "/auth"];
 
@@ -17,11 +19,25 @@ function isPublicPath(pathname: string) {
  * (renamed from `middleware.ts`/`middleware()` to `proxy.ts`/`proxy()`).
  */
 export async function updateSession(request: NextRequest) {
+  let env: SupabaseEnv;
+  try {
+    env = readSupabaseEnv();
+  } catch (err) {
+    // Sin esto, un despliegue sin variables devuelve un "Internal Server
+    // Error" opaco en TODAS las rutas (el proxy corre antes que cualquier página).
+    console.error(err);
+    return new NextResponse(err instanceof Error ? err.message : "Configuración de Supabase incompleta.", {
+      status: 500,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+  const { url, key } = env;
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    url,
+    key,
     {
       cookies: {
         getAll() {
@@ -38,9 +54,16 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Si Supabase no responde (proyecto pausado, red), se trata como sesión
+  // ausente: el usuario llega al login en vez de a un 500.
+  let user: User | null = null;
+  try {
+    ({
+      data: { user },
+    } = await supabase.auth.getUser());
+  } catch (err) {
+    console.error("Supabase auth.getUser falló en el proxy:", err);
+  }
 
   const { pathname } = request.nextUrl;
 
