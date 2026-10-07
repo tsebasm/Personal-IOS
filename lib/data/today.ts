@@ -6,6 +6,7 @@ import { rankActions, type ActionCandidate, type Ranking } from "@/lib/engine/pr
 import { getCurrentProfile } from "./profile";
 import { loadPlanContext, type PlanContext } from "./plan";
 import { ensureRoutineInstances } from "./routines";
+import { syncTierSuggestions } from "./tiers";
 
 export type TodayTask = ActionCandidate & { status: string };
 
@@ -38,6 +39,8 @@ export const loadTodayContext = cache(async (): Promise<TodayContext | null> => 
   const today = planCtx?.today ?? isoDateInTimezone(profile.timezone);
   // Las rutinas aprobadas generan las tareas del día antes de leerlas (P-11).
   await ensureRoutineInstances(supabase as unknown as Parameters<typeof ensureRoutineInstances>[0], today);
+  // Nivel P0/P1/P2 sugerido al día (reglas y estructura pueden haber cambiado; nunca pisa overrides).
+  await syncTierSuggestions(supabase);
 
   const [{ data: openTasks }, { data: doneTodayData }, { data: goals }, { data: deps }, { data: blocks }, { data: sessionsToday }] =
     await Promise.all([

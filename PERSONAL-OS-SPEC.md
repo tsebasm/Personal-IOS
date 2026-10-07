@@ -3600,6 +3600,9 @@ Cambios a esta especificación aprobados explícitamente por el usuario. El deta
 | C-3 | 2026-10-06 | §43, P-10 | `change_sets` es la única autoridad de aprobación y aplicación de paquetes de cambios. Una decisión vinculada refleja ese ciclo; EVALUADA es exclusivo de la decisión. Claude nunca aprueba sus propias propuestas. |
 | C-4 | 2026-10-06 | §40 | Decisión de un experimento: `keep` (mantener) · `revert` (revertir al valor anterior) · `modify` (modificar antes de continuar) · `inconclusive` (sin ganador por falta de evidencia). Los registros previos `change` se migran a `modify`. |
 
+| B-1 | 2026-10-06 | §28, §65 | P0/P1/P2 se **sugiere** a partir de datos y relaciones (plan aprobado → rutina → `priority_rules` → aporte a la meta actual = P1 → sin vínculo = P2). P0 solo sale de datos explícitos, nunca del texto del título. El usuario puede sobrescribir: se conserva la sugerencia y se registran fuente `user`, fecha y razón opcional en `activity_logs`. Es reversible. Nueva entidad PRIORITY_RULES (configuración como datos; Claude puede proponerlas, no aplicarlas). **Pendiente:** ¿razón obligatoria al bajar una tarea desde P0? |
+| B-2 | 2026-10-06 | §31, §32, §61 | Bloqueo **visual**, no funcional: un P0 incompleto implica prioridad visual, impacto en el score y advertencia. La navegación nunca se bloquea. |
+
 **Política de tasa de cambio (C-1):**
 1. **Tasa de referencia:** se usa la tasa USD→COP más reciente registrada por el usuario con `rate_date ≤` la fecha de evaluación.
 2. **Vigencia máxima: 31 días.** Si no existe ninguna tasa, o la más reciente es más antigua, el progreso en USD se muestra como **pendiente de conversión** y solo se muestra el acumulado en COP. Nunca se usa una cifra estimada presentada como exacta.

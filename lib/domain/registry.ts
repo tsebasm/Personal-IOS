@@ -12,6 +12,9 @@ import {
   identityRuleShape,
   metricDefinitionShape,
   milestoneShape,
+  PRIORITY_RULE_MSG,
+  priorityRuleCheck,
+  priorityRuleObject,
   objectiveShape,
   objectiveSystemShape,
   projectDependencyShape,
@@ -93,6 +96,8 @@ export const ENTITY_REGISTRY = {
   fx_rate: { table: "fx_rates", layer: "execution", shape: fxRateObject, sensitivity: S("normal", "locked"), claudeMayPropose: false, check: { fn: fxRateCheck, message: FX_RATE_MSG } },
   // Dinero recibido (C-1): dato observado; Claude nunca lo propone.
   revenue_receipt: { table: "revenue_receipts", layer: "execution", shape: revenueReceiptObject, sensitivity: S("normal", "locked"), claudeMayPropose: false, check: { fn: revenueReceiptCheck, message: REVENUE_RECEIPT_MSG } },
+  // Reglas de prioridad (B-1): configuración estratégica; Claude puede proponerlas, nunca aplicarlas.
+  priority_rule: { table: "priority_rules", layer: "strategy", shape: priorityRuleObject, sensitivity: S("strategic"), claudeMayPropose: true, check: { fn: priorityRuleCheck, message: PRIORITY_RULE_MSG } },
 } satisfies Record<string, EntitySpec>;
 
 export type EntityType = keyof typeof ENTITY_REGISTRY;

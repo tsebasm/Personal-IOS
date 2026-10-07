@@ -1,4 +1,5 @@
 import { CheckSquare } from "lucide-react";
+import { TierControl, type TierInfo } from "@/components/tier-control";
 import { createClient } from "@/lib/supabase/server";
 import { deleteTask } from "@/lib/actions/tasks";
 import { Card } from "@/components/ui/card";
@@ -27,7 +28,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 export default async function TasksPage() {
   const supabase = await createClient();
-  const [{ data }, { data: areasData }, { data: projectsData }, { data: goalsData }] = await Promise.all([
+  const [{ data }, { data: areasData }, { data: projectsData }, { data: goalsData }, { data: tierData }] = await Promise.all([
     supabase
       .from("tasks")
       .select(
@@ -38,7 +39,10 @@ export default async function TasksPage() {
     supabase.from("projects").select("id, title").order("created_at", { ascending: false }),
     // Todas las metas (no solo activas): editar una tarea ligada a una meta cumplida no debe desvincularla.
     supabase.from("goals").select("id, title").order("created_at", { ascending: false }),
+    // Nivel P0/P1/P2 (0021) en consulta aparte: si la migración falta, la lista sigue funcionando.
+    supabase.from("tasks").select("id, tier, tier_suggested, tier_suggested_reason, tier_source, tier_override_reason"),
   ]);
+  const tiers = new Map(((tierData ?? []) as (TierInfo & { id: string })[]).map((t) => [t.id, t]));
 
   const tasks = (data ?? []) as TaskFormValues[];
   const areas = areasData ?? [];
@@ -67,7 +71,10 @@ export default async function TasksPage() {
           <ul className="divide-y divide-border">
             {tasks.map((t) => (
               <li key={t.id} className="flex items-center justify-between gap-3 px-5 py-3">
-                <span className="text-sm text-ink truncate">{t.title}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  {tiers.get(t.id) && <TierControl taskId={t.id} info={tiers.get(t.id)!} />}
+                  <span className="text-sm text-ink truncate">{t.title}</span>
+                </div>
                 <div className="flex items-center gap-2.5 flex-none">
                   <Badge tone="neutral">{STATUS_LABEL[t.status] ?? t.status}</Badge>
                   <Badge tone={PRIORITY_TONE[t.priority] ?? "neutral"}>{t.priority}</Badge>

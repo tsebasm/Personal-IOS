@@ -45,6 +45,7 @@ describe("4. permisos de Claude por operación", () => {
       evaluate_decision: false,
       record_observed_data: false,
       materialize_routines: false,
+      override_tier: false,
     });
     for (const op of OPERATIONS) expect(POLICY[op].user, op).toBe(true);
   });

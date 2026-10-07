@@ -431,3 +431,47 @@ describe("A4. instancias de rutinas (materialize_routine_instances)", () => {
     expect(await n("select 1 from tasks where routine_id = $1", [rtB.id])).toBe(0);
   });
 });
+
+// -----------------------------------------------------------------------------
+describe("B2. override de P0/P1/P2 (0021)", () => {
+  it("la sugerencia se conserva, el override no se pisa al recalcular, y revertir vuelve a la sugerencia", async () => {
+    await as(A, async () => {
+      const t = await one<{ id: string }>("insert into tasks (title, lever) values ('Llamar leads', 'sales_call') returning id");
+      const sug = (tier: string) => JSON.stringify([{ id: t.id, tier, source: "rule", reason: "Regla de prioridad (palanca sales_call)" }]);
+      await q("select apply_tier_suggestions($1)", [sug("p0")]);
+      expect(await one("select tier, tier_source, tier_suggested from tasks where id = $1", [t.id])).toEqual({ tier: "p0", tier_source: "rule", tier_suggested: "p0" });
+
+      await q("select set_tier_override($1, 'p2', 'Hoy delego las llamadas')", [t.id]);
+      // Cambia la regla: la sugerencia se actualiza, el nivel efectivo del usuario NO.
+      await q("select apply_tier_suggestions($1)", [sug("p1")]);
+      expect(await one("select tier, tier_source, tier_suggested, tier_overridden_by, tier_override_reason from tasks where id = $1", [t.id])).toEqual({
+        tier: "p2", tier_source: "user", tier_suggested: "p1", tier_overridden_by: "user", tier_override_reason: "Hoy delego las llamadas",
+      });
+
+      await q("select clear_tier_override($1)", [t.id]);
+      expect(await one("select tier, tier_source, tier_overridden_at from tasks where id = $1", [t.id])).toEqual({ tier: "p1", tier_source: "rule", tier_overridden_at: null });
+
+      const log = (await q<{ action: string; payload: Record<string, unknown> }>("select action, payload from activity_logs where entity_id = $1 order by created_at", [t.id])).rows;
+      expect(log.map((l) => l.action)).toEqual(["tier_override_set", "tier_override_cleared"]);
+      expect(log[0].payload).toMatchObject({ from: "p0", to: "p2", suggested: "p0", reason: "Hoy delego las llamadas" });
+    });
+  });
+
+  it("un override sin marca de usuario es imposible; nadie cambia el nivel de una tarea ajena", async () => {
+    const tB = await as(B, () => one<{ id: string }>("insert into tasks (title) values ('de B') returning id"));
+    await as(A, async () => {
+      await expect(q("update tasks set tier_source = 'user' where id = (select id from tasks limit 1)")).rejects.toThrow(/check/);
+      await expect(q("select set_tier_override($1, 'p0', null)", [tB.id])).rejects.toThrow(/inexistente o ajena/);
+    });
+  });
+
+  it("las reglas son únicas por (sistema, palanca) vigentes; archivar libera el lugar", async () => {
+    await as(A, async () => {
+      const r = await one<{ id: string }>("insert into priority_rules (lever, tier) values ('outbound', 'p0') returning id");
+      await expect(q("insert into priority_rules (lever, tier) values ('outbound', 'p1')")).rejects.toThrow(/duplicate|unique/);
+      await q("update priority_rules set archived_at = now() where id = $1", [r.id]);
+      await q("insert into priority_rules (lever, tier) values ('outbound', 'p1')");
+      await expect(q("insert into priority_rules (tier) values ('p1')")).rejects.toThrow(/check/);
+    });
+  });
+});

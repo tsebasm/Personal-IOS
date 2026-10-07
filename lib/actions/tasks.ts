@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { DEVICES, EXECUTION_MODES, TASK_LEVERS } from "@/lib/tasks";
 import { MISS_DECISIONS, MISS_REASONS } from "@/lib/adaptive";
 import type { ActionState } from "./types";
+import { assertCan } from "@/lib/intelligence/permissions";
+import { syncTierSuggestions } from "@/lib/data/tiers";
 
 const scale = z
   .string()
@@ -88,6 +90,8 @@ export async function createTask(_prev: ActionState, formData: FormData): Promis
 
   const { error } = await supabase.from("tasks").insert(toRow(parsed.data));
   if (error) return { ok: false, error: "No pudimos crear la tarea." };
+  // Nivel P0/P1/P2 sugerido a partir de reglas y estructura (B-1).
+  await syncTierSuggestions(supabase);
 
   revalidate();
   return { ok: true };
@@ -120,6 +124,7 @@ export async function updateTask(_prev: ActionState, formData: FormData): Promis
     })
     .eq("id", id);
   if (error) return { ok: false, error: "No pudimos actualizar la tarea." };
+  await syncTierSuggestions(supabase);
 
   revalidate();
   return { ok: true };
@@ -249,6 +254,36 @@ export async function deleteTask(id: string): Promise<ActionState> {
   const { error } = await supabase.from("tasks").delete().eq("id", id);
   if (error) return { ok: false, error: "No pudimos eliminar la tarea." };
 
+  revalidate();
+  return { ok: true };
+}
+
+const tierChoiceSchema = z.object({
+  id: z.string().uuid(),
+  tier: z.enum(["auto", "p0", "p1", "p2"]),
+  reason: z.string().trim().max(500).optional(),
+});
+
+/**
+ * Override del nivel P0/P1/P2 (spec §130 B-1): conserva la sugerencia
+ * automática, registra usuario/fecha/razón (activity_logs) y es reversible
+ * eligiendo "Automático".
+ */
+export async function setTaskTier(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Debes iniciar sesión." };
+  assertCan("user", "override_tier");
+  const parsed = tierChoiceSchema.safeParse({ id: formData.get("id"), tier: formData.get("tier"), reason: formData.get("tier_reason") || undefined });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { id, tier, reason } = parsed.data;
+  const { error } =
+    tier === "auto"
+      ? await supabase.rpc("clear_tier_override", { p_task: id })
+      : await supabase.rpc("set_tier_override", { p_task: id, p_tier: tier, p_reason: reason ?? null });
+  if (error) return { ok: false, error: `No se pudo cambiar el nivel: ${error.message}` };
   revalidate();
   return { ok: true };
 }

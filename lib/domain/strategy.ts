@@ -398,3 +398,18 @@ export const Experiment = rowOf(experimentObject(z.string().uuid())).refine(expe
 export type RoadmapPhase = z.infer<typeof RoadmapPhase>;
 export type Experiment = z.infer<typeof Experiment>;
 export type Intervention = z.infer<ReturnType<typeof interventionShape>>;
+
+// REGLAS DE PRIORIDAD (spec §28, §130 B-1): P0/P1/P2 sugerido como datos ---------------
+
+export const priorityRuleObject = (fk: FkSchema) =>
+  z.object({
+    system_id: fk.nullable().default(null),
+    lever: z.string().regex(/^[a-z][a-z0-9_]*$/).nullable().default(null),
+    tier: z.enum(["p0", "p1", "p2"]),
+    note: optText,
+  });
+export const priorityRuleCheck = (r: { system_id: string | null; lever: string | null }) => r.system_id !== null || r.lever !== null;
+export const PRIORITY_RULE_MSG = "Una regla necesita sistema o palanca.";
+export const priorityRuleShape = (fk: FkSchema) => priorityRuleObject(fk).refine(priorityRuleCheck, PRIORITY_RULE_MSG);
+export const PriorityRule = rowOf(priorityRuleObject(z.string().uuid())).refine(priorityRuleCheck, PRIORITY_RULE_MSG);
+export type PriorityRule = z.infer<typeof PriorityRule>;

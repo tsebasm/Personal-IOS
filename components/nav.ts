@@ -16,6 +16,7 @@ import {
   Timer,
   GitPullRequest,
   Banknote,
+  Settings,
 } from "lucide-react";
 
 export type NavItem = {
@@ -43,6 +44,7 @@ export const NAV: NavItem[] = [
   { href: "/dashboard/reviews", label: "Revisiones", icon: RefreshCw },
   { href: "/dashboard/cambios", label: "Cambios", icon: GitPullRequest },
   { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
+  { href: "/dashboard/configuracion", label: "Configuración", icon: Settings },
 ];
 
 export function isNavActive(href: string, pathname: string): boolean {
