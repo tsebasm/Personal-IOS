@@ -26,3 +26,40 @@ export const fxRateShape = (fk: FkSchema) => fxRateObject(fk).refine(fxRateCheck
 
 export const FxRate = rowOf(fxRateObject(z.string().uuid())).refine(fxRateCheck, FX_RATE_MSG);
 export type FxRate = z.infer<typeof FxRate>;
+
+// INGRESO RECONOCIDO (C-1, regla definitiva) ------------------------------------
+// Única fuente del acumulado de la meta: dinero efectivamente recibido.
+// received cuenta · reversed deja de contar y conserva el historial.
+
+export const REVENUE_CONCEPTS = ["setup", "monthly_fee", "commission", "additional_commission", "other"] as const;
+export const REVENUE_STATUSES = ["received", "reversed"] as const;
+
+export const revenueReceiptObject = (fk: FkSchema) =>
+  z.object({
+    vant_client_id: fk.nullable().default(null),
+    counterparty: optText,
+    received_at: z.string().datetime({ offset: true }),
+    amount: z.number().finite().positive(),
+    currency: currencyCode.default("COP"),
+    concept: z.enum(REVENUE_CONCEPTS),
+    status: z.enum(REVENUE_STATUSES).default("received"),
+    reversed_at: z.string().datetime({ offset: true }).nullable().default(null),
+    reversal_reason: optText,
+    reference: optText,
+    idempotency_key: optText,
+    note: optText,
+  });
+export const revenueReceiptCheck = (r: {
+  vant_client_id: string | null;
+  counterparty: string | null;
+  status: string;
+  reversed_at: string | null;
+  reversal_reason: string | null;
+}) =>
+  (r.vant_client_id !== null || r.counterparty !== null) &&
+  (r.status === "reversed") === (r.reversed_at !== null) &&
+  (r.status !== "reversed" || r.reversal_reason !== null);
+export const REVENUE_RECEIPT_MSG = "Recibo inválido: indica cliente o contraparte; una reversión exige fecha y motivo.";
+
+export const RevenueReceipt = rowOf(revenueReceiptObject(z.string().uuid())).refine(revenueReceiptCheck, REVENUE_RECEIPT_MSG);
+export type RevenueReceipt = z.infer<typeof RevenueReceipt>;

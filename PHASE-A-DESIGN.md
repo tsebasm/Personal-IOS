@@ -256,3 +256,17 @@ Una sola función, `moneyGoalProgress` (`lib/engine/fx.ts`), convierte **el acum
 | Revisiones (snapshot) | Sin tasa | El snapshot guarda la tasa usada (C) |
 
 **Bloqueo abierto:** qué cuenta como **ingreso reconocido**. Ver el informe de A2.
+
+### 9.3 Implementación (A3, migración 0019)
+
+- Funciones transaccionales `cs_propose`, `cs_review` y `cs_apply` (`security invoker`: corren con la sesión del usuario y RLS activo). Son la **única** vía para cambiar estados: los triggers `change_sets_guard`, `change_items_guard` y `decisions_guard` rechazan updates directos.
+- `goal_change`: tipo de paquete propio para §11. Solo lo propone `user` (CHECK), contiene un único update sobre `goal`, exige decisión, guarda el snapshot before/after, sube `version` y vuelve a bloquear (`locked_at`). El trigger `goals_lock_guard` impide editar la definición de una meta bloqueada por cualquier otra vía; `current_value` sigue siendo editable.
+- Ownership: `cs_apply` verifica cada entidad tocada y cada referencia, sea FK del catálogo, columna polimórfica (`evidence.entity_id`, `decisions.entity_id`, `ideas.converted_entity_id`) o referencia dentro de jsonb (`experiments.interventions[].target_id`). Un test de completitud falla si aparece una columna uuid nueva sin cubrir.
+
+## 11. Deuda técnica de seguridad registrada (2026-10-06)
+
+| ID | Riesgo | Estado |
+|---|---|---|
+| SEC-1 | Las FK no comprueban el dueño: conociendo un UUID ajeno, se puede **enlazar** (nunca leer) una fila de otro usuario. | **Cerrado para change sets** (`cs_apply`, probado). **Abierto en los CRUD directos existentes** (formularios de tareas, proyectos, hábitos…, que escriben FKs sin pasar por change sets). Opciones: validar en cada server action, o claves compuestas `(id, user_id)`. Decisión del usuario: validación explícita en `applyChangeSet` para este ciclo; los CRUD quedan pendientes. |
+| SEC-2 | La base no distingue usuario de Claude (misma sesión). | Mitigado: política por operación en `lib/intelligence/permissions.ts` + `approved_by='user'` registrado por la base. Toda herramienta futura de Claude debe usar el servicio con actor `claude`. |
+| SEC-3 | Un usuario con acceso SQL directo (dueño del proyecto Supabase) puede saltarse las banderas `pos.cs_engine` / `pos.goal_change`. | Aceptado: las protecciones son contra la app y Claude, no contra el dueño de la base. |

@@ -36,7 +36,7 @@ import {
   taskCheck,
   taskObject,
 } from "./execution";
-import { FX_RATE_MSG, fxRateCheck, fxRateObject } from "./finance";
+import { FX_RATE_MSG, fxRateCheck, fxRateObject, REVENUE_RECEIPT_MSG, revenueReceiptCheck, revenueReceiptObject } from "./finance";
 import type { ChangeItem, Inconsistency, Sensitivity } from "./intelligence";
 
 /**
@@ -91,6 +91,8 @@ export const ENTITY_REGISTRY = {
   daily_log: { table: "daily_logs", layer: "execution", shape: dailyLogShape, sensitivity: S("normal", "locked"), claudeMayPropose: false },
   // Dato financiero de referencia (C-1): lo registra el usuario, nunca Claude.
   fx_rate: { table: "fx_rates", layer: "execution", shape: fxRateObject, sensitivity: S("normal", "locked"), claudeMayPropose: false, check: { fn: fxRateCheck, message: FX_RATE_MSG } },
+  // Dinero recibido (C-1): dato observado; Claude nunca lo propone.
+  revenue_receipt: { table: "revenue_receipts", layer: "execution", shape: revenueReceiptObject, sensitivity: S("normal", "locked"), claudeMayPropose: false, check: { fn: revenueReceiptCheck, message: REVENUE_RECEIPT_MSG } },
 } satisfies Record<string, EntitySpec>;
 
 export type EntityType = keyof typeof ENTITY_REGISTRY;

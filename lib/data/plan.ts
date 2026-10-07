@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { isoDateInTimezone } from "@/lib/date";
-import { computeBillingSummary, type VantClient } from "@/lib/agencia/billing";
+import { recognizedRevenue } from "@/lib/engine/revenue";
 import { sumProspectingTotals, type ProspectingTotals } from "@/lib/agencia/metrics";
 import {
   parseAssumptions,
@@ -51,8 +51,15 @@ export const loadPlanContext = cache(async (): Promise<PlanContext | null> => {
   const supabase = await createClient();
   const today = isoDateInTimezone(profile.timezone);
 
-  const [{ data: profileRow }, { data: settings }, { data: sessions }, { data: clientsData }, { data: leadsData }, { data: hypothesesData }] =
-    await Promise.all([
+  const [
+    { data: profileRow },
+    { data: settings },
+    { data: sessions },
+    { data: receiptsData },
+    { data: leadsData },
+    { data: hypothesesData },
+    { data: fxData },
+  ] = await Promise.all([
     supabase.from("profiles").select("north_star_goal_id").eq("id", profile.userId).maybeSingle(),
     supabase
       .from("agencia_settings")
@@ -63,13 +70,11 @@ export const loadPlanContext = cache(async (): Promise<PlanContext | null> => {
       .select(
         "date, hypothesis_id, contacts_count, replies_count, appointments_count, shows_count, proposals_count, followups_count, clients_closed, minutes_spent"
       ),
-    supabase
-      .from("vant_clients")
-      .select(
-        "id, name, start_date, status, setup_fee, commission_type, commission_value, monthly_fee, additional_commission, ad_spend, paused_at, cancelled_at"
-      ),
+    // Ingreso reconocido = dinero recibido (única fuente de la meta, spec §130 C-1).
+    supabase.from("revenue_receipts").select("amount, currency, status, received_at").eq("status", "received"),
     supabase.from("leads").select("stage, next_followup_on"),
     supabase.from("hypotheses").select("id, type, status").in("type", ["niche", "offer", "market"]),
+    supabase.from("fx_rates").select("base_currency, quote_currency, rate, rate_date, source, source_reference").lte("rate_date", today),
   ]);
 
   const assumptions = parseAssumptions(settings?.funnel_assumptions);
@@ -145,30 +150,32 @@ export const loadPlanContext = cache(async (): Promise<PlanContext | null> => {
 
   const { data: goal } = await supabase
     .from("goals")
-    .select("id, title, unit, baseline_value, target_value, current_value, start_date, deadline")
+    // "*": tolera una base donde 0017 (currency, kpi_metric_key) aún no se aplicó.
+    .select("*")
     .eq("id", goalId)
     .maybeSingle();
   if (!goal) return withTarget(null, null);
 
-  const clients: VantClient[] = (clientsData ?? []).map((c) => ({
-    ...c,
-    setup_fee: Number(c.setup_fee),
-    commission_value: Number(c.commission_value),
-    monthly_fee: Number(c.monthly_fee),
-    additional_commission: Number(c.additional_commission),
-    ad_spend: Number(c.ad_spend),
-  }));
-
   const plan = buildPlan({
     today,
     goal: {
-      ...goal,
+      id: goal.id,
+      title: goal.title,
+      unit: goal.unit ?? null,
+      currency: goal.currency ?? null,
       baseline_value: goal.baseline_value !== null ? Number(goal.baseline_value) : null,
       target_value: goal.target_value !== null ? Number(goal.target_value) : null,
       current_value: goal.current_value !== null ? Number(goal.current_value) : null,
+      start_date: goal.start_date ?? null,
+      deadline: goal.deadline ?? null,
     },
-    isVantRevenueGoal: goal.id === vantGoalId,
-    revenueCumulative: computeBillingSummary(clients, today).totalRevenue,
+    // Meta de ingresos: la de VANT o cualquiera cuyo KPI sea el dinero recibido (P-14: dato, no código).
+    isVantRevenueGoal: goal.id === vantGoalId || goal.kpi_metric_key === "revenue_received",
+    revenue: {
+      recognized: recognizedRevenue(receiptsData ?? []),
+      rates: (fxData ?? []).map((r) => ({ ...r, rate: Number(r.rate) })),
+      offerCurrency: "COP",
+    },
     totals,
     assumptions,
     pipeline,

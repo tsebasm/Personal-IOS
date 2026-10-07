@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Crosshair, Target, TrendingDown, AlertTriangle } from "lucide-react";
 import { loadPlanContext } from "@/lib/data/plan";
-import { money, pct } from "@/lib/format";
+import { describeConversion, moneyIn, pct } from "@/lib/format";
+import { goalCurrency } from "@/lib/engine/plan";
 import { RATE_SOURCE_LABEL, type RateSource } from "@/lib/engine/rates";
 import { FUNNEL_STAGES, FUNNEL_STAGE_LABEL, sensitivity } from "@/lib/engine/reverse";
 import type { GapResult } from "@/lib/engine/gap";
@@ -63,8 +64,8 @@ export default async function PlanPage() {
   }
 
   const { goal, gap, rates, closes, reverse, reverseInput } = plan;
-  const isMoney = (goal.unit ?? "").toUpperCase() === "COP";
-  const fmt = (n: number | null) => (n === null ? "—" : isMoney ? money(n) : `${int(n)} ${goal.unit ?? ""}`);
+  const isMoney = !!goal.currency || /^[A-Z]{3}$/.test(goal.unit ?? "");
+  const fmt = (n: number | null) => (n === null ? "—" : isMoney ? moneyIn(n, goalCurrency(goal)) : `${int(n)} ${goal.unit ?? ""}`);
   const replySensitivity =
     reverseInput && reverse?.ok ? sensitivity(reverseInput, "reply", [0.5, 1, 1.5, 2]) : [];
 
@@ -84,12 +85,19 @@ export default async function PlanPage() {
         <div className="px-5 pb-5">
           <div className="flex items-center justify-between gap-3 mb-1 text-xs text-ink-dim">
             <span>
-              {fmt(plan.currentValue)} de {fmt(gap.target)}{" "}
-              {plan.currentSource === "billing" && "(calculado de la facturación real)"}
+              {plan.currentValue === null ? "Progreso pendiente de conversión" : fmt(plan.currentValue)} de {fmt(gap.target)}{" "}
+              {plan.currentSource === "receipts" && "(dinero recibido)"}
             </span>
             <span className="tabular-nums">{pct(gap.progressPct)}</span>
           </div>
-          <ProgressBar value={gap.progressPct ?? 0} className="mb-4" />
+          <ProgressBar value={gap.progressPct ?? 0} className="mb-2" />
+          {plan.revenueRecorded && (
+            <p className="mb-4 text-[0.7rem] text-ink-dim">
+              Recibido (moneda original):{" "}
+              {plan.revenueRecorded.length === 0 ? "sin pagos registrados" : plan.revenueRecorded.map((r) => moneyIn(r.amount, r.currency)).join(" + ")}
+              {describeConversion(plan.conversion) && ` · ${describeConversion(plan.conversion)}`}
+            </p>
+          )}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
             <Stat label="Punto A" value={fmt(gap.baseline)} />
             <Stat label="Falta" value={fmt(gap.remaining)} />
@@ -160,7 +168,7 @@ export default async function PlanPage() {
             <>
               {closes.kind === "revenue" && (
                 <p className="text-xs text-ink-dim mb-4">
-                  Cada cliente nuevo aporta ≈ {money(closes.revenuePerClient)} hasta el deadline (cierre supuesto{" "}
+                  Cada cliente nuevo aporta ≈ {fmt(closes.revenuePerClient)} hasta el deadline (cierre supuesto{" "}
                   {closes.assumedCloseDate}) → se necesitan <strong className="text-ink">{closes.closesNeeded} cliente(s)</strong>.
                 </p>
               )}

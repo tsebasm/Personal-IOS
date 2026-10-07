@@ -67,7 +67,7 @@ export function SerHacerTenerCard({ data, today }: { data: SerHacerTener; today:
       <Card>
         <CardHeader title="TENER" action={<Badge tone="neutral">resultados</Badge>} />
         <div className="px-5 pb-5 grid grid-cols-2 gap-3 text-xs">
-          <Stat label="Facturación acumulada" value={money(tener.revenueCumulative)} />
+          <Stat label="Facturación esperada (contratos)" value={money(tener.revenueCumulative)} hint="Informativa: no cuenta para la meta" />
           <Stat label="Clientes activos" value={`${tener.activeClients}`} />
           <Stat label="Progreso meta principal" value={pct(tener.northStarProgressPct)} />
         </div>
@@ -76,11 +76,12 @@ export function SerHacerTenerCard({ data, today }: { data: SerHacerTener; today:
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div>
       <div className="text-ink-dim mb-1">{label}</div>
       <div className="text-sm font-semibold text-ink tabular-nums">{value}</div>
+      {hint && <div className="text-[0.68rem] text-ink-dim mt-0.5">{hint}</div>}
     </div>
   );
 }

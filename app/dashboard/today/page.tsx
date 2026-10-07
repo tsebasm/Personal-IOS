@@ -5,7 +5,8 @@ import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
 import { actionableMinutes } from "@/lib/engine/capacity";
 import type { ScoredAction } from "@/lib/engine/priority";
-import { money, pct } from "@/lib/format";
+import { describeConversion, money, moneyIn, pct } from "@/lib/format";
+import { goalCurrency } from "@/lib/engine/plan";
 import { EXECUTION_MODE_LABEL, TASK_LEVER_LABEL, type TaskLever } from "@/lib/tasks";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -43,9 +44,9 @@ export default async function TodayPage() {
   const events = eventsData ?? [];
 
   const plan = planCtx?.plan ?? null;
-  const isMoney = (plan?.goal.unit ?? "").toUpperCase() === "COP";
+  const isMoney = !!plan && (!!plan.goal.currency || /^[A-Z]{3}$/.test(plan.goal.unit ?? ""));
   const fmt = (n: number | null) =>
-    n === null ? "—" : isMoney ? money(n) : `${Math.round(n).toLocaleString("es-CO")} ${plan?.goal.unit ?? ""}`;
+    n === null ? "—" : isMoney && plan ? moneyIn(n, goalCurrency(plan.goal)) : `${Math.round(n).toLocaleString("es-CO")} ${plan?.goal.unit ?? ""}`;
   const usable = actionableMinutes(capacity);
 
   return (
@@ -71,7 +72,15 @@ export default async function TodayPage() {
                   <span className="text-sm font-medium text-ink truncate">{plan.goal.title}</span>
                   <span className="text-sm font-semibold text-ink tabular-nums">{pct(plan.gap.progressPct)}</span>
                 </div>
-                <ProgressBar value={plan.gap.progressPct ?? 0} className="mb-3" />
+                <ProgressBar value={plan.gap.progressPct ?? 0} className="mb-1" />
+                {plan.revenueRecorded && (
+                  <p className="mb-3 text-[0.68rem] text-ink-dim">
+                    {plan.currentValue === null ? "Progreso pendiente de conversión · " : ""}
+                    Recibido:{" "}
+                    {plan.revenueRecorded.length === 0 ? "sin pagos registrados" : plan.revenueRecorded.map((r) => moneyIn(r.amount, r.currency)).join(" + ")}
+                    {describeConversion(plan.conversion) ? ` · ${describeConversion(plan.conversion)}` : ""}
+                  </p>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <Stat label="Falta" value={fmt(plan.gap.remaining)} />
                   <Stat label="Días restantes" value={plan.gap.daysLeft === null ? "—" : `${plan.gap.daysLeft}`} />

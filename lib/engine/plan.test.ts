@@ -10,6 +10,7 @@ const input: PlanInput = {
     id: "g1",
     title: "Facturación acumulada VANT",
     unit: "COP",
+    currency: null,
     baseline_value: 0,
     target_value: 20_000_000,
     current_value: 999, // manual: debe ignorarse en la meta de VANT
@@ -17,7 +18,7 @@ const input: PlanInput = {
     deadline: "2026-12-31",
   },
   isVantRevenueGoal: true,
-  revenueCumulative: 0,
+  revenue: { recognized: [], rates: [], offerCurrency: "COP" },
   totals: zeroTotals,
   assumptions: parseAssumptions({
     reply_rate: 8,
@@ -34,9 +35,9 @@ const input: PlanInput = {
 };
 
 describe("buildPlan", () => {
-  it("la meta de VANT toma el valor actual de la facturación, no del campo manual", () => {
-    const plan = buildPlan({ ...input, revenueCumulative: 3_000_000 });
-    expect(plan.currentSource).toBe("billing");
+  it("la meta de VANT toma el valor actual del dinero recibido, no del campo manual ni de la facturación", () => {
+    const plan = buildPlan({ ...input, revenue: { ...input.revenue, recognized: [{ amount: 3_000_000, currency: "COP" }] } });
+    expect(plan.currentSource).toBe("receipts");
     expect(plan.currentValue).toBe(3_000_000);
     expect(plan.gap.remaining).toBe(17_000_000);
   });
@@ -102,5 +103,45 @@ describe("parseAssumptions / parsePipelineSnapshot", () => {
     expect(parseAssumptions(null).reply_rate).toBeNull();
     expect(parseAssumptions({ reply_rate: "8" }).reply_rate).toBe(8);
     expect(parsePipelineSnapshot({ replied: -3, booked: "2" })).toEqual({ replied: 0, booked: 2, showed: 0, as_of: null });
+  });
+});
+
+describe("buildPlan — meta en USD con ingresos en COP (C-1, Decisión #001)", () => {
+  const usdGoal = { ...input.goal, title: "Facturar 5.000 USD acumulados", unit: "USD", currency: "USD", target_value: 5000 };
+  const trm = { base_currency: "USD", quote_currency: "COP", rate: 4000, rate_date: "2026-09-20", source: "TRM" };
+
+  it("convierte lo recibido en COP a USD; la meta sigue en 5.000 USD; el COP original se conserva", () => {
+    const plan = buildPlan({
+      ...input,
+      goal: usdGoal,
+      revenue: { recognized: [{ amount: 4_000_000, currency: "COP" }], rates: [trm], offerCurrency: "COP" },
+    });
+    expect(plan.currentValue).toBeCloseTo(1000);
+    expect(plan.gap.target).toBe(5000);
+    expect(plan.gap.progressPct).toBeCloseTo(20);
+    expect(plan.revenueRecorded).toEqual([{ amount: 4_000_000, currency: "COP" }]);
+    expect(plan.conversion?.status).toBe("ok");
+    // El precio de la oferta (COP) se expresa en USD con la misma tasa: 5M COP / 4000 = 1250 USD por cliente.
+    expect(plan.closes.kind).toBe("revenue");
+    if (plan.closes.kind === "revenue") {
+      expect(plan.closes.revenuePerClient).toBeCloseTo(1250);
+      expect(plan.closes.closesNeeded).toBe(Math.ceil(4000 / 1250));
+    }
+  });
+
+  it("sin tasa vigente: progreso pendiente, sin cifras inventadas y sin calcular clientes", () => {
+    const plan = buildPlan({ ...input, goal: usdGoal, revenue: { recognized: [{ amount: 4_000_000, currency: "COP" }], rates: [], offerCurrency: "COP" } });
+    expect(plan.currentValue).toBeNull();
+    expect(plan.gap.progressPct).toBeNull();
+    expect(plan.gap.remaining).toBeNull();
+    expect(plan.conversion).toMatchObject({ status: "pending" });
+    expect(plan.closes).toMatchObject({ kind: "missing", missing: [expect.stringMatching(/tasa de cambio vigente COP→USD/)] });
+    expect(plan.revenueRecorded).toEqual([{ amount: 4_000_000, currency: "COP" }]);
+  });
+
+  it("sin pagos recibidos el progreso es 0 real (no hay nada que convertir)", () => {
+    const plan = buildPlan({ ...input, goal: usdGoal, revenue: { recognized: [], rates: [], offerCurrency: "COP" } });
+    expect(plan.currentValue).toBe(0);
+    expect(plan.gap.progressPct).toBe(0);
   });
 });

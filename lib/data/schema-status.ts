@@ -17,6 +17,7 @@ const PROBES: { file: string; table: string; column: string }[] = [
   { file: "0015_growth_engine.sql", table: "leads", column: "id" },
   { file: "0017_spec_model.sql", table: "systems", column: "id" },
   { file: "0018_ingestion.sql", table: "change_sets", column: "id" },
+  { file: "0019_change_set_engine.sql", table: "revenue_receipts", column: "id" },
 ];
 
 /** Códigos de Postgres/PostgREST para "no existe": tabla o columna. */

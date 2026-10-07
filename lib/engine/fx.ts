@@ -100,3 +100,36 @@ export function moneyGoalProgress(input: {
     conversion,
   };
 }
+
+export type MoneyAmount = { amount: number; currency: string };
+
+export type ConvertedTotal =
+  | { status: "ok"; amount: number; currency: string; lookups: { from: string; ref: ReferenceRate }[] }
+  | { status: "pending"; currency: string; missing: { from: string; reason: "no_rate" | "stale_rate"; latest: FxRateLike | null }[] };
+
+/**
+ * Suma montos en varias monedas expresándolos en `to`. Si alguna moneda no tiene
+ * tasa vigente, el total queda pendiente (no se suma una parte y se calla el resto).
+ */
+export function convertTotals(
+  totals: MoneyAmount[],
+  to: string,
+  rates: FxRateLike[],
+  asOf: string,
+  policy: { maxAgeDays: number } = FX_POLICY
+): ConvertedTotal {
+  let amount = 0;
+  const lookups: { from: string; ref: ReferenceRate }[] = [];
+  const missing: { from: string; reason: "no_rate" | "stale_rate"; latest: FxRateLike | null }[] = [];
+  for (const t of totals) {
+    if (t.amount === 0) continue;
+    const r = referenceRate(rates, t.currency, to, asOf, policy);
+    if (r.status === "ok") {
+      amount += t.amount * r.ref.factor;
+      if (t.currency !== to) lookups.push({ from: t.currency, ref: r.ref });
+    } else {
+      missing.push({ from: t.currency, reason: r.reason, latest: r.latest });
+    }
+  }
+  return missing.length > 0 ? { status: "pending", currency: to, missing } : { status: "ok", amount, currency: to, lookups };
+}

@@ -75,15 +75,14 @@ describe("migraciones 0001 → 0018 sobre Postgres", () => {
     ).rejects.toThrow(/check/);
   });
 
-  it("change sets (C-3): solo el usuario aprueba; aplicado/rechazado es terminal", async () => {
+  it("change sets (C-3): nacen en draft y su estado no se cambia por fuera del motor (0019)", async () => {
     await asUser(db, A, async () => {
       await expect(db.query("insert into change_sets (title, proposed_by, status, approved_by, approved_at) values ('x','claude','approved','claude', now())")).rejects.toThrow();
-      await expect(db.query("insert into change_sets (title, proposed_by, status) values ('x','claude','approved')")).rejects.toThrow(/check/);
-      const cs = await one<{ id: string }>(db, "insert into change_sets (title, proposed_by, status) values ('x','claude','proposed') returning id");
-      await db.query("update change_sets set status = 'approved', approved_by = 'user', approved_at = now() where id = $1", [cs.id]);
-      await db.query("update change_sets set status = 'applied', applied_at = now() where id = $1", [cs.id]);
-      await expect(db.query("update change_sets set status = 'proposed' where id = $1", [cs.id])).rejects.toThrow(/no puede pasar/);
+      await expect(db.query("insert into change_sets (title, proposed_by, status) values ('x','claude','approved')")).rejects.toThrow(/nace en draft/);
+      const cs = await one<{ id: string }>(db, "insert into change_sets (title, proposed_by) values ('x','claude') returning id");
+      await expect(db.query("update change_sets set status = 'approved', approved_by = 'user', approved_at = now() where id = $1", [cs.id])).rejects.toThrow(/solo cambia mediante/);
     });
+    // Ciclo completo y estados terminales: change-set-engine.pg.test.ts
   });
 
   it("trazabilidad: entidad → change_item → change_set → plan_import → source_document", async () => {

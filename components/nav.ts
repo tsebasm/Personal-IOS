@@ -14,6 +14,7 @@ import {
   Crosshair,
   Clock,
   Timer,
+  GitPullRequest,
 } from "lucide-react";
 
 export type NavItem = {
@@ -38,6 +39,7 @@ export const NAV: NavItem[] = [
   { href: "/dashboard/agencia", label: "Agencia", icon: Building2 },
   { href: "/dashboard/finances", label: "Finanzas", icon: Wallet },
   { href: "/dashboard/reviews", label: "Revisiones", icon: RefreshCw },
+  { href: "/dashboard/cambios", label: "Cambios", icon: GitPullRequest },
   { href: "/dashboard/insights", label: "Insights", icon: Sparkles },
 ];
 

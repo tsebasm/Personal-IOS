@@ -6,6 +6,7 @@ import { RATE_SOURCE_LABEL } from "@/lib/engine/rates";
 import { FUNNEL_STAGES, FUNNEL_STAGE_LABEL } from "@/lib/engine/reverse";
 import { BOTTLENECK_LABEL } from "@/lib/engine/bottleneck";
 import { MISS_REASON_LABEL, type MissReason } from "@/lib/adaptive";
+import { describeConversion } from "@/lib/format";
 
 const pct = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
 const cop = (n: number) => `${Math.round(n).toLocaleString("es-CO")} COP`;
@@ -45,11 +46,18 @@ export async function buildEngineContext(): Promise<string> {
     lines.push("META PRINCIPAL: no hay North Star ni meta de VANT vinculada. [DATO FALTANTE]");
   } else {
     const g = plan.gap;
+    const unit = plan.goal.currency ?? plan.goal.unit ?? "";
+    const actual =
+      plan.currentValue === null ? "PENDIENTE DE CONVERSIÓN (sin tasa vigente) [DATO FALTANTE]" : `${Math.round(plan.currentValue).toLocaleString("es-CO")} ${unit}`;
     lines.push(
-      `META PRINCIPAL: "${plan.goal.title}" · actual ${plan.goal.unit === "COP" ? cop(plan.currentValue) : plan.currentValue} (${
-        plan.currentSource === "billing" ? "calculado de facturación real" : "valor manual"
-      }) · objetivo ${g.target ?? "—"} · falta ${g.remaining ?? "—"} · días restantes ${g.daysLeft ?? "—"} · progreso ${g.progressPct ?? "—"}% [DATO]`
+      `META PRINCIPAL: "${plan.goal.title}" · actual ${actual} (${
+        plan.currentSource === "receipts" ? "dinero efectivamente recibido" : "valor manual"
+      }) · objetivo ${g.target ?? "—"} ${unit} · falta ${g.remaining ?? "—"} · días restantes ${g.daysLeft ?? "—"} · progreso ${g.progressPct ?? "—"}% [DATO]`
     );
+    if (plan.revenueRecorded) {
+      const recorded = plan.revenueRecorded.map((r) => `${Math.round(r.amount).toLocaleString("es-CO")} ${r.currency}`).join(" + ") || "0";
+      lines.push(`  Recibido en moneda original: ${recorded}. ${describeConversion(plan.conversion) ?? ""} [DATO]`);
+    }
     lines.push("TASAS DEL EMBUDO:");
     for (const s of FUNNEL_STAGES) {
       const r = plan.rates[s];
@@ -113,7 +121,7 @@ export async function buildEngineContext(): Promise<string> {
         sht.hacer.salesMinutes / 60
       )} h de ventas registradas [DATO]`
     );
-    lines.push(`TENER: facturación acumulada ${cop(sht.tener.revenueCumulative)}, ${sht.tener.activeClients} clientes activos [DATO]`);
+    lines.push(`TENER: facturación esperada por contratos ${cop(sht.tener.revenueCumulative)} (proyección de billing.ts: INFORMATIVA, no cuenta para la meta), ${sht.tener.activeClients} clientes activos [DATO]`);
   }
 
   const reasonCounts = new Map<string, number>();
