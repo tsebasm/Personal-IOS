@@ -400,3 +400,34 @@ describe("5. Decisión #001 — cambio de meta a 5.000 USD (§11)", () => {
     });
   });
 });
+
+// -----------------------------------------------------------------------------
+describe("A4. instancias de rutinas (materialize_routine_instances)", () => {
+  it("idempotente, con snapshot del objetivo del día y origen 'system'", async () => {
+    await as(A, async () => {
+      const sys = await one<{ id: string }>("insert into systems (title, type) values ('Adq', 'acquisition') returning id");
+      const rt = await one<{ id: string }>("insert into routines (system_id, title, metric_key, target_per_occurrence, unit, cadence, tier, valid_from) values ($1,'Contactar','contacts',30,'contactos','weekdays','p0','2026-10-07') returning id", [sys.id]);
+      const inst = [{ routine_id: rt.id, title: "Contactar", scheduled_date: "2026-10-09", target_qty: 60, unit: "contactos", metric_key: "contacts", tier: "p0", execution_mode: null, estimated_minutes: 240 }];
+      expect((await one<{ n: number }>("select materialize_routine_instances($1) as n", [JSON.stringify(inst)])).n).toBe(1);
+      expect((await one<{ n: number }>("select materialize_routine_instances($1) as n", [JSON.stringify(inst)])).n).toBe(0);
+      const t = await one<{ target_qty: string; status: string; plan_state: string; origin: string; created_by: string; system_id: string }>(
+        "select target_qty::text, status, plan_state, origin, created_by, system_id from tasks where routine_id = $1", [rt.id]
+      );
+      expect(t).toEqual({ target_qty: "60", status: "pending", plan_state: "today", origin: "system", created_by: "system", system_id: sys.id });
+      // Cambiar la regla después no reescribe la instancia ya creada.
+      await q("update routines set target_per_occurrence = 45 where id = $1", [rt.id]);
+      await q("select materialize_routine_instances($1)", [JSON.stringify(inst.map((i) => ({ ...i, target_qty: 45 })))]);
+      expect(await one("select target_qty::text from tasks where routine_id = $1", [rt.id])).toEqual({ target_qty: "60" });
+    });
+  });
+
+  it("no crea instancias de rutinas de otro usuario", async () => {
+    const sysB = await as(B, () => one<{ id: string }>("insert into systems (title, type) values ('S', 'other') returning id"));
+    const rtB = await as(B, () => one<{ id: string }>("insert into routines (system_id, title, metric_key, target_per_occurrence, unit, cadence, tier, valid_from) values ($1,'r','contacts',30,'n','daily','p0','2026-10-07') returning id", [sysB.id]));
+    await as(A, async () => {
+      const inst = [{ routine_id: rtB.id, title: "x", scheduled_date: "2026-10-09", target_qty: 1, unit: "n", metric_key: "contacts", tier: "p0", execution_mode: null, estimated_minutes: null }];
+      await expect(q("select materialize_routine_instances($1)", [JSON.stringify(inst)])).rejects.toThrow(/ownership/);
+    });
+    expect(await n("select 1 from tasks where routine_id = $1", [rtB.id])).toBe(0);
+  });
+});

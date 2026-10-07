@@ -5,6 +5,7 @@ import { computeDayCapacity, type CapacityBlock, type DayCapacity } from "@/lib/
 import { rankActions, type ActionCandidate, type Ranking } from "@/lib/engine/priority";
 import { getCurrentProfile } from "./profile";
 import { loadPlanContext, type PlanContext } from "./plan";
+import { ensureRoutineInstances } from "./routines";
 
 export type TodayTask = ActionCandidate & { status: string };
 
@@ -35,6 +36,8 @@ export const loadTodayContext = cache(async (): Promise<TodayContext | null> => 
   const supabase = await createClient();
   const planCtx = await loadPlanContext();
   const today = planCtx?.today ?? isoDateInTimezone(profile.timezone);
+  // Las rutinas aprobadas generan las tareas del día antes de leerlas (P-11).
+  await ensureRoutineInstances(supabase as unknown as Parameters<typeof ensureRoutineInstances>[0], today);
 
   const [{ data: openTasks }, { data: doneTodayData }, { data: goals }, { data: deps }, { data: blocks }, { data: sessionsToday }] =
     await Promise.all([

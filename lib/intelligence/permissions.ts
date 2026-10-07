@@ -32,6 +32,7 @@ export const OPERATIONS = [
   "apply",
   "evaluate_decision",
   "record_observed_data",
+  "materialize_routines",
 ] as const;
 export type Operation = (typeof OPERATIONS)[number];
 
@@ -46,6 +47,7 @@ export const POLICY: Record<Operation, Rule> = {
   apply: { user: true, claude: false, system: false, claudeLevel: null, why: "Aplicar es un acto del usuario en este ciclo: nada estratégico se aplica en silencio." },
   evaluate_decision: { user: true, claude: false, system: false, claudeLevel: null, why: "Evaluar el resultado de una decisión es del usuario; Claude puede analizarlo." },
   record_observed_data: { user: true, claude: false, system: true, claudeLevel: null, why: "§6: Claude no inventa resultados (métricas, recibos, evidencia, tasas)." },
+  materialize_routines: { user: true, claude: false, system: true, claudeLevel: null, why: "§99 nivel 5: crear las instancias del día de reglas ya aprobadas; automático y de bajo riesgo, nunca de Claude." },
 };
 
 export class PermissionError extends Error {
