@@ -165,7 +165,7 @@ export class TemplateInterpreter implements PlanInterpreter {
 
     // ---- Change set ----------------------------------------------------------
     const items: ProposedItemInput[] = [];
-    const add = (p: Omit<ProposedItemInput, "seq" | "entity_id" | "depends_on"> & { depends_on?: string[] }) =>
+    const add = (p: Omit<ProposedItemInput, "seq" | "entity_id" | "depends_on" | "temp_ref"> & { depends_on?: string[]; temp_ref?: string | null }) =>
       items.push({ seq: items.length + 1, entity_id: null, depends_on: [], ...p, temp_ref: p.temp_ref ?? null });
 
     add({

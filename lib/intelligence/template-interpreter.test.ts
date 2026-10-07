@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { validateChangeSet } from "@/lib/domain/registry";
 import { TemplateInterpreter } from "./template-interpreter";
+import type { StrategyContext } from "./interpreter";
 import { PLAN_FIXTURE } from "./fixtures/plan-outbound";
 
 const GOAL = { id: "11111111-1111-4111-8111-111111111111", title: "Facturar 5.000 USD", locked: true };
-const ctx = { today: "2026-10-06", goal: GOAL, systems: [] as { id: string; title: string }[], metricKeys: [] as string[] };
+const ctx: StrategyContext = { today: "2026-10-06", goal: GOAL, systems: [], metricKeys: [] };
 const interp = (content: string, c = ctx) => new TemplateInterpreter().interpret(content, c);
 
 describe("intérprete de plantilla (A5)", () => {
