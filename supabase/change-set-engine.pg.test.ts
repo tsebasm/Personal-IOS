@@ -513,3 +513,30 @@ describe("B4. cierre del día (0022)", () => {
     });
   });
 });
+
+// -----------------------------------------------------------------------------
+describe("B-1. razón obligatoria solo al bajar desde P0 (0023)", () => {
+  it("P0 → P1/P2 sin razón se rechaza; con razón se permite y queda trazado; subir o volver a Automático no la exige", async () => {
+    await as(A, async () => {
+      const t = await one<{ id: string }>("insert into tasks (title, lever) values ('Llamadas', 'sales_call') returning id");
+      await q("select apply_tier_suggestions($1)", [JSON.stringify([{ id: t.id, tier: "p0", source: "rule", reason: "Regla (palanca sales_call)" }])]);
+      await expect(q("select set_tier_override($1, 'p2', null)", [t.id])).rejects.toThrow(/exige una razón/);
+      await expect(q("select set_tier_override($1, 'p1', '   ')", [t.id])).rejects.toThrow(/exige una razón/);
+      expect(await one("select tier, tier_source from tasks where id = $1", [t.id])).toEqual({ tier: "p0", tier_source: "rule" });
+
+      await q("select set_tier_override($1, 'p2', 'Hoy solo puedo preparar la lista')", [t.id]);
+      expect(await one("select tier, tier_suggested, tier_overridden_by, tier_override_reason from tasks where id = $1", [t.id])).toEqual({
+        tier: "p2", tier_suggested: "p0", tier_overridden_by: "user", tier_override_reason: "Hoy solo puedo preparar la lista",
+      });
+      await q("select set_tier_override($1, 'p1', null)", [t.id]); // P2 → P1: opcional
+      await q("select set_tier_override($1, 'p0', null)", [t.id]); // P1 → P0: opcional
+      await q("select clear_tier_override($1)", [t.id]); // volver a Automático: sin razón
+      expect(await one("select tier, tier_source from tasks where id = $1", [t.id])).toEqual({ tier: "p0", tier_source: "rule" });
+
+      const p2 = await one<{ id: string }>("insert into tasks (title) values ('Leer') returning id");
+      await q("select apply_tier_suggestions($1)", [JSON.stringify([{ id: p2.id, tier: "p2", source: "default", reason: "Sin vínculo" }])]);
+      await q("select set_tier_override($1, 'p0', null)", [p2.id]); // P2 → P0: opcional
+      expect((await one<{ tier: string }>("select tier from tasks where id = $1", [p2.id])).tier).toBe("p0");
+    });
+  });
+});

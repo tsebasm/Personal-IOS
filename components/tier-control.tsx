@@ -50,7 +50,12 @@ export function TierControl({ taskId, info }: { taskId: string; info: TierInfo }
           <option value="p1">P1 — capacidad</option>
           <option value="p2">P2 — secundario</option>
         </select>
-        <input name="tier_reason" placeholder="Razón (opcional)" maxLength={500} className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink" />
+        <input
+          name="tier_reason"
+          placeholder={info.tier === "p0" ? "Razón (obligatoria si bajas desde P0)" : "Razón (opcional)"}
+          maxLength={500}
+          className="rounded-md border border-border bg-surface px-2 py-1 text-xs text-ink"
+        />
         <button disabled={pending} className="rounded-md bg-ink px-2 py-1 text-xs font-medium text-bg disabled:opacity-50">
           {pending ? "Guardando…" : "Guardar nivel"}
         </button>

@@ -283,7 +283,12 @@ export async function setTaskTier(_prev: ActionState, formData: FormData): Promi
     tier === "auto"
       ? await supabase.rpc("clear_tier_override", { p_task: id })
       : await supabase.rpc("set_tier_override", { p_task: id, p_tier: tier, p_reason: reason ?? null });
-  if (error) return { ok: false, error: `No se pudo cambiar el nivel: ${error.message}` };
+  if (error) {
+    return {
+      ok: false,
+      error: error.message.includes("exige una razón") ? "Para bajar una tarea desde P0 escribe la razón (B-1)." : `No se pudo cambiar el nivel: ${error.message}`,
+    };
+  }
   revalidate();
   return { ok: true };
 }

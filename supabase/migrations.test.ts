@@ -31,7 +31,8 @@ describe("migraciones", () => {
     // 0009 es RLS de 0008 (se reportan juntas);
     // 0016 solo cambia un CHECK: no se puede sondear con un select y tiene fallback en el código.
     // 0020 solo agrega una función (rpc); el loader de Hoy la omite si no existe.
-    const exempt = new Set(["0009", "0016", "0020"]);
+    // 0023 solo reemplaza una función (regla B-1 de razón al bajar desde P0).
+    const exempt = new Set(["0009", "0016", "0020", "0023"]);
     for (const f of files.filter((x) => Number(x.slice(0, 4)) >= 8)) {
       const n = f.slice(0, 4);
       if (!exempt.has(n)) expect(probed.has(n), `${f} sin sonda en schema-status.ts`).toBe(true);
