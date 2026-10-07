@@ -8,6 +8,39 @@ La columna **Fase** indica dónde se cierra el gap: A modelo · B execution engi
 
 > Revocado de `AUDIT.md`: *"SISTEMAS sin tabla por ahora"*. Los Sistemas entran en el modelo y en Supabase en la Fase A.
 
+## 0. Estado tras la Fase A (A1–A8 cerradas, 2026-10-06)
+
+Esta sección es el estado vigente; las tablas de §1–§2 son la línea base de la auditoría.
+Leyenda: **M** = modelo + Supabase + RLS + tests · **L** = lógica/motor · **UI** = pantalla · el siguiente paso indica la fase.
+
+| Elemento | Estado | Dónde | Falta → fase |
+|---|---|---|---|
+| Meta + bloqueo + cambio con decisión | ✅ M L UI | `goals` (locked_at, currency, kpi), `goals_lock_guard`, goal_change, `/dashboard/cambios` | Aplicar la Decisión #001 en producción (usuario) |
+| Moneda / tasa de cambio (C-1) | ✅ M L · 🟡 UI | `fx_rates`, `lib/engine/fx.ts`, transparencia en Hoy/Plan | Pantalla para registrar tasas → **B** |
+| Ingreso reconocido | ✅ M L · 🟡 UI | `revenue_receipts`, `lib/engine/revenue.ts`, progreso de la meta | Pantalla para registrar recibos → **B** |
+| Objetivos | ✅ M · 🟡 UI | `objectives` (vía plan importado) | Migrar sub-metas existentes + vista → **B** |
+| **Sistemas** | ✅ M | `systems`, `objective_systems` (n–n) | Vista de sistemas → **B** |
+| Proyectos / milestones / dependencias | ✅ M | `projects`+, `milestones`, `project_dependencies` | UI de milestones → **B** |
+| Rutinas → tareas del día | ✅ M L | `routines`, `lib/engine/routines.ts`, `materialize_routine_instances`, Hoy | Mostrar avance (x/60) en Hoy → **B** |
+| Tareas: estados §26, P0/P1/P2, cantidades, evidencia | ✅ M · 🟡 UI | `tasks`+, `evidence`, `legacy.ts` | HOY v2, reescritura de estados heredados → **B** |
+| Métricas como datos (4 categorías) | ✅ M L | `metric_definitions`, `metric_entries`, `metric-providers.ts` | Registro rápido de métricas → **B** |
+| Funnels por canal | ✅ M | `funnels` | Motor inverso genérico (`reverse.ts` con etapas) → **C** |
+| Hipótesis (§15) + escenarios + supuestos | ✅ M | `hypotheses`+ | Cálculo de escenarios BEAR/BASE/BULL/ACTUAL → **C** |
+| Experimentos + intervenciones (P-12) | ✅ M L | `experiments`+, decisión keep/revert/modify/inconclusive | Cierre con decisión desde la UI → **C** |
+| Roadmap | ✅ M | `roadmap_phases` (derivado al importar) | Vista y criterios de salida → **C** |
+| Decisiones (§43–44) | ✅ M L | `decisions`, sincronizadas con change sets (C-3) | Vista del registro de decisiones → **C** |
+| Change sets / ingesta (P-10) | ✅ M L UI | 0018–0019, `lib/intelligence/*`, Importar plan | Revisión por ítem en la UI → **C** |
+| Intérprete de planes | ✅ L (plantilla) | `TemplateInterpreter`; criterio de aceptación probado de punta a punta | `ClaudeInterpreter` (texto libre) → **C** |
+| Permisos de Claude (§99) | ✅ L | `lib/intelligence/permissions.ts` | Herramientas de Claude que usen el servicio → **C** |
+| Registro diario (§35) | ✅ M | `daily_logs` | Cerrar el día (snapshot) → **B** |
+| Revisión semanal (12 secciones) | 🟡 | `rollup.ts` + `reviews` | Ampliar a §46 → **C** |
+| SOPs | ✅ M | `sops` | UI y ciclo experimento → SOP → **C** |
+| Identidad / Ideas | ✅ M | `identity_rules`, `ideas` | UI mínima → **B/C** |
+| Ritmo (6 estados) / score de ejecución | ❌ | — | **B** |
+| Bloqueo visual / día completo / Hard Mode | ❌ | — | **B** |
+| Obsidian | ✅ contrato · 🟡 export | `lib/obsidian/*`, `scripts/export-obsidian.mjs` | Sincronización real según el plan de sync → **D** |
+| Seguridad SEC-1 (FK en CRUD directos) | 🟡 | cerrado en change sets | Validar ownership en server actions existentes → **B** |
+
 ---
 
 ## 1. Matriz principal
