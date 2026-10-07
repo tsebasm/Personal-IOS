@@ -17,6 +17,8 @@ export type PlanGoal = {
   id: string;
   title: string;
   unit: string | null;
+  /** §11: no nulo = meta bloqueada. */
+  locked_at?: string | null;
   /** Moneda principal de una meta monetaria (C-1). Si falta y la unidad es un código ISO, se usa la unidad. */
   currency: string | null;
   baseline_value: number | null;

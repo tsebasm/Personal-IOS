@@ -1,6 +1,7 @@
 import { FileText, GitPullRequest, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/profile";
+import { isoDateInTimezone } from "@/lib/date";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -52,6 +53,7 @@ export default async function ChangesPage() {
     supabase.from("profiles").select("north_star_goal_id").eq("id", profile?.userId ?? "").maybeSingle(),
   ]);
   const goalId = (prof?.north_star_goal_id as string | null) ?? null;
+  const today = isoDateInTimezone(profile?.timezone ?? "America/Bogota");
   const { data: goal } = goalId
     ? await supabase.from("goals").select("*").eq("id", goalId).maybeSingle()
     : { data: null };
@@ -80,7 +82,7 @@ export default async function ChangesPage() {
                 <div className="mt-3">
                   <GoalChangeForm
                     goalId={goal.id}
-                    defaults={{ title: "", unit: goal.currency ?? goal.unit ?? "", currency: goal.currency ?? "", deadline: goal.deadline ?? "" }}
+                    defaults={{ title: "", unit: goal.currency ?? goal.unit ?? "", currency: goal.currency ?? "", deadline: goal.deadline ?? "", startDate: goal.start_date ?? today }}
                   />
                 </div>
               </details>

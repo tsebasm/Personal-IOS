@@ -163,6 +163,7 @@ export const loadPlanContext = cache(async (): Promise<PlanContext | null> => {
       title: goal.title,
       unit: goal.unit ?? null,
       currency: goal.currency ?? null,
+      locked_at: goal.locked_at ?? null,
       baseline_value: goal.baseline_value !== null ? Number(goal.baseline_value) : null,
       target_value: goal.target_value !== null ? Number(goal.target_value) : null,
       current_value: goal.current_value !== null ? Number(goal.current_value) : null,

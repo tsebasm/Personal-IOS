@@ -54,6 +54,7 @@ const goalChangeSchema = z.object({
     .regex(/^[A-Z]{3}$/, "Moneda ISO de 3 letras (USD, COP…).")
     .optional(),
   deadline: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha límite inválida."),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Fecha de inicio inválida.").optional(),
   measure_received: z.boolean(),
   problem: z.string().trim().min(1, "Explica por qué cambia la meta.").max(2000),
   reason: z.string().trim().min(1, "La razón es obligatoria (§11).").max(2000),
@@ -74,6 +75,7 @@ export async function proposeGoalChange(_prev: ActionState, formData: FormData):
     unit: formData.get("unit"),
     currency: formData.get("currency") || undefined,
     deadline: formData.get("deadline"),
+    start_date: formData.get("start_date") || undefined,
     measure_received: formData.get("measure_received") === "on",
     problem: formData.get("problem"),
     reason: formData.get("reason"),
@@ -87,6 +89,7 @@ export async function proposeGoalChange(_prev: ActionState, formData: FormData):
     unit: d.unit,
     currency: d.currency ?? null,
     deadline: d.deadline,
+    ...(d.start_date ? { start_date: d.start_date } : {}),
     activation_state: "active",
     ...(d.measure_received ? { kpi_metric_key: "revenue_received" } : {}),
   };

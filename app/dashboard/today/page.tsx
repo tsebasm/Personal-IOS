@@ -1,18 +1,17 @@
 import Link from "next/link";
-import { Sun, Calendar, Target, Clock, AlertTriangle, CheckCircle2, Timer, Activity } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, CheckCircle2, ChevronRight, Clock, Lock, Sun, Target, Timer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
+import { loadDayExecution, type DayItem } from "@/lib/data/day";
 import { actionableMinutes } from "@/lib/engine/capacity";
-import type { ScoredAction } from "@/lib/engine/priority";
-import { describeConversion, money, moneyIn, pct } from "@/lib/format";
 import { goalCurrency } from "@/lib/engine/plan";
-import { EXECUTION_MODE_LABEL, TASK_LEVER_LABEL, type TaskLever } from "@/lib/tasks";
+import { PACE_LABEL, paceGap, paceStatus, type PaceState } from "@/lib/engine/execution";
+import { describeConversion, money, moneyIn, pct } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProgressBar } from "@/components/ui/progress-bar";
-import { EmptyState } from "@/components/ui/empty-state";
-import { LinkButton } from "@/components/ui/link-button";
+import { TierControl } from "@/components/tier-control";
 import { loadSerHacerTener } from "@/lib/data/ser-hacer-tener";
 import { loadAnalytics } from "@/lib/data/analytics";
 import { SerHacerTenerCard } from "./ser-hacer-tener";
@@ -21,17 +20,28 @@ import { QuickTimeLog } from "@/components/quick-time-log";
 
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60 ? `${min % 60}m` : ""}`.trim() : `${min}m`);
 
+const PACE_TONE: Record<PaceState, "good" | "neutral" | "warn" | "bad"> = {
+  very_ahead: "good",
+  ahead: "good",
+  on_pace: "neutral",
+  slightly_behind: "warn",
+  behind: "warn",
+  critically_behind: "bad",
+};
+
 /**
- * Command Center: responde "¿qué hago hoy para acercarme a la meta?".
- * Máximo 3 prioridades, cada una con el porqué; el resto queda secundario.
+ * HOY v2 (spec §30–§32, §93–§94; B-2): META → HOY → P0 → P1 → resto.
+ * Un P0 incompleto da prioridad visual, impacto en el score y advertencia.
+ * NUNCA bloquea: todo lo demás sigue accesible (colapsado) y el menú intacto.
  */
 export default async function TodayPage() {
   const ctx = await loadTodayContext();
   if (!ctx) return null;
   const supabase = await createClient();
-  const { today, timezone, planCtx, capacity, ranking, missed, doneToday, outreachQuota, contactsToday } = ctx;
+  const { today, timezone, planCtx, capacity, ranking, missed } = ctx;
 
-  const [sht, analytics, { data: eventsData }] = await Promise.all([
+  const [day, sht, analytics, { data: eventsData }] = await Promise.all([
+    loadDayExecution(supabase, today, timezone),
     loadSerHacerTener(),
     loadAnalytics(),
     supabase
@@ -47,127 +57,157 @@ export default async function TodayPage() {
   const isMoney = !!plan && (!!plan.goal.currency || /^[A-Z]{3}$/.test(plan.goal.unit ?? ""));
   const fmt = (n: number | null) =>
     n === null ? "—" : isMoney && plan ? moneyIn(n, goalCurrency(plan.goal)) : `${Math.round(n).toLocaleString("es-CO")} ${plan?.goal.unit ?? ""}`;
+  const pace = plan ? paceStatus(plan.gap.requiredPerDay, plan.gap.actualPerDay) : null;
   const usable = actionableMinutes(capacity);
+
+  const { score } = day;
+  const byTier = (t: "p0" | "p1" | "p2") => day.items.filter((i) => (i.tier ?? "p2") === t);
+  const p0 = byTier("p0");
+  const p1 = byTier("p1");
+  const p2 = byTier("p2");
+  const firstPendingP0 = p0.find((i) => !i.completion.complete) ?? null;
+
+  // Acciones del plan (p. ej. cuota de prospección) si ninguna tarea de hoy ya mide esa métrica.
+  const coveredMetrics = new Set(day.items.map((i) => i.metric_key).filter(Boolean));
+  const planActions = ranking.top
+    .concat(ranking.secondary)
+    .filter((s) => s.item.kind === "plan")
+    .filter((s) => !(s.item.id === "plan:outreach" && coveredMetrics.has("contacts")));
 
   return (
     <main className="flex-1 px-4 md:px-8 py-6 max-w-3xl w-full mx-auto">
-      <div className="mb-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-semibold text-ink">Hoy</h1>
         <p className="text-sm text-ink-dim mt-1 capitalize">{friendlyDate(timezone)}</p>
       </div>
 
       <div className="flex flex-col gap-4">
-        {/* NORTH STAR ------------------------------------------------------ */}
+        {/* FRICCIÓN VISUAL (B-2): advertencia, nunca bloqueo ------------------------ */}
+        {score.p0Pending > 0 && firstPendingP0 && (
+          <div className="rounded-lg border border-warn bg-warn-bg px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-warn">
+              <AlertTriangle size={16} /> P0 pendiente — {progressText(firstPendingP0)}
+            </div>
+            <p className="mt-0.5 text-xs text-warn">
+              {score.p0Pending === 1 ? "Queda 1 acción crítica" : `Quedan ${score.p0Pending} acciones críticas`}. Hazla antes de lo opcional: lo demás sigue disponible abajo y en el menú.
+            </p>
+          </div>
+        )}
+        {score.missionComplete && (
+          <div className="rounded-lg border border-good bg-good-bg px-4 py-3 text-sm font-semibold text-good flex items-center gap-2">
+            <CheckCircle2 size={16} /> Misión principal completada
+          </div>
+        )}
+
+        {/* META ----------------------------------------------------------------------- */}
         <Card>
-          <CardHeader title="Meta principal" icon={<Target size={16} className="text-ink-dim" />} />
+          <CardHeader
+            title={plan?.goal.locked_at ? "Meta activa" : "Meta principal"}
+            icon={plan?.goal.locked_at ? <Lock size={16} className="text-ink-dim" /> : <Target size={16} className="text-ink-dim" />}
+            action={pace && pace.state ? <Badge tone={PACE_TONE[pace.state]}>{PACE_LABEL[pace.state]}</Badge> : undefined}
+          />
           <div className="px-5 pb-5">
             {!plan ? (
               <p className="text-sm text-ink-dim">
-                No hay meta principal. <Link href="/dashboard/goals" className="underline underline-offset-2">Marca una North Star</Link>{" "}
-                para que el sistema priorice contra ella.
+                No hay meta principal. <Link href="/dashboard/goals" className="underline underline-offset-2">Marca una North Star</Link> para que el sistema priorice contra ella.
               </p>
             ) : (
               <>
-                <div className="flex items-center justify-between gap-3 mb-1">
-                  <span className="text-sm font-medium text-ink truncate">{plan.goal.title}</span>
+                <div className="flex items-end justify-between gap-3 mb-1">
+                  <span className="text-base font-semibold text-ink">{plan.goal.title}</span>
+                  <span className="text-xs text-ink-dim tabular-nums whitespace-nowrap">{plan.gap.daysLeft === null ? "" : `D-${plan.gap.daysLeft}`}</span>
+                </div>
+                <div className="flex items-center gap-3 mb-1">
+                  <ProgressBar value={plan.gap.progressPct ?? 0} className="flex-1" />
                   <span className="text-sm font-semibold text-ink tabular-nums">{pct(plan.gap.progressPct)}</span>
                 </div>
-                <ProgressBar value={plan.gap.progressPct ?? 0} className="mb-1" />
-                {plan.revenueRecorded && (
-                  <p className="mb-3 text-[0.68rem] text-ink-dim">
-                    {plan.currentValue === null ? "Progreso pendiente de conversión · " : ""}
-                    Recibido:{" "}
-                    {plan.revenueRecorded.length === 0 ? "sin pagos registrados" : plan.revenueRecorded.map((r) => moneyIn(r.amount, r.currency)).join(" + ")}
-                    {describeConversion(plan.conversion) ? ` · ${describeConversion(plan.conversion)}` : ""}
-                  </p>
-                )}
+                <p className="text-[0.7rem] text-ink-dim mb-3">
+                  {plan.currentValue === null ? "Progreso pendiente de conversión" : `${fmt(plan.currentValue)} de ${fmt(plan.gap.target)}`}
+                  {plan.revenueRecorded &&
+                    ` · recibido: ${plan.revenueRecorded.length === 0 ? "sin pagos registrados" : plan.revenueRecorded.map((r) => moneyIn(r.amount, r.currency)).join(" + ")}`}
+                  {describeConversion(plan.conversion) ? ` · ${describeConversion(plan.conversion)}` : ""}
+                </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <Stat label="Falta" value={fmt(plan.gap.remaining)} />
-                  <Stat label="Días restantes" value={plan.gap.daysLeft === null ? "—" : `${plan.gap.daysLeft}`} />
+                  <Stat label="Ritmo requerido / día" value={fmt(plan.gap.requiredPerDay)} />
                   <Stat
-                    label="Contactos hoy"
-                    value={outreachQuota ? `${contactsToday} / ${outreachQuota.target}` : `${contactsToday}`}
-                    hint={outreachQuota ? (outreachQuota.source === "calculated" ? "cuota del plan" : "cuota manual") : "sin cuota: completa el plan"}
+                    label="Ritmo real / día"
+                    value={plan.gap.actualPerDay === null ? "—" : fmt(plan.gap.actualPerDay)}
+                    hint={pace && !pace.state && pace.reason === "no_actual" ? "falta fecha de inicio de la meta" : undefined}
                   />
                   <Stat
-                    label="Cierres necesarios"
-                    value={plan.closes.kind === "revenue" || plan.closes.kind === "clients" ? `${plan.closes.closesNeeded}` : "—"}
+                    label="Brecha 7 días"
+                    value={pace && pace.state ? fmt(paceGap(pace.requiredPerDay, pace.actualPerDay).weekly) : "—"}
                   />
                 </div>
-                <Link href="/dashboard/plan" className="inline-block mt-3 text-xs font-medium text-ink-dim hover:text-ink">
-                  Ver el plan →
-                </Link>
               </>
             )}
           </div>
         </Card>
 
-        {/* QUÉ CAMBIÓ ------------------------------------------------------ */}
-        {analytics && (
-          <Card>
-            <CardHeader title="¿Qué cambió desde ayer?" icon={<Activity size={16} className="text-ink-dim" />} />
-            <div className="px-5 pb-4 text-sm">
-              {analytics.dayDiff.length === 0 ? (
-                <p className="text-xs text-ink-dim">Sin cambios registrados todavía hoy frente a ayer.</p>
-              ) : (
-                <ul className="flex flex-col gap-1">
-                  {analytics.dayDiff.map((d) => (
-                    <li key={d.key} className="flex justify-between gap-3 text-xs">
-                      <span className="text-ink">{d.label}</span>
-                      <span className="tabular-nums text-ink-dim">
-                        ayer {d.key === "revenue" ? money(d.yesterday) : d.yesterday} → hoy{" "}
-                        <span className={d.delta > 0 ? "text-good" : "text-warn"}>{d.key === "revenue" ? money(d.today) : d.today}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </Card>
-        )}
-
-        {/* CAPACIDAD ------------------------------------------------------- */}
+        {/* HOY: P0 → P1 → P2 -------------------------------------------------------------- */}
         <Card>
           <CardHeader
-            title="Tiempo disponible hoy"
-            icon={<Clock size={16} className="text-ink-dim" />}
-            action={
-              <Link href="/dashboard/capacity" className="text-xs text-ink-dim hover:text-ink">
-                Editar
-              </Link>
-            }
+            title="Hoy"
+            icon={<Sun size={16} className="text-ink-dim" />}
+            action={<span className="text-sm font-semibold text-ink tabular-nums">Ejecución {score.score === null ? "—" : `${score.score}%`}</span>}
           />
-          <div className="px-5 pb-5">
-            {!capacity.configured ? (
-              <p className="text-sm text-ink-dim">
-                Sin bloques de capacidad para hoy: el Top 3 no se ajusta a tu tiempo real.{" "}
-                <Link href="/dashboard/capacity" className="underline underline-offset-2">
-                  Define tu semana tipo
-                </Link>
-                .
+          <div className="px-5 pb-5 flex flex-col gap-4">
+            <div className="grid grid-cols-3 gap-3">
+              {(["p0", "p1", "p2"] as const).map((t) => (
+                <div key={t}>
+                  <div className="flex justify-between text-[0.68rem] text-ink-dim mb-1">
+                    <span className="font-semibold">{t.toUpperCase()}</span>
+                    <span className="tabular-nums">
+                      {score.byTier[t].done}/{score.byTier[t].planned}
+                    </span>
+                  </div>
+                  <ProgressBar value={score.byTier[t].planned ? (score.byTier[t].done / score.byTier[t].planned) * 100 : 0} />
+                </div>
+              ))}
+            </div>
+
+            <TierSection title="P0 — Crítico" items={p0} emphasis>
+              {planActions.map((s) => (
+                <li key={s.item.id} className="flex items-center justify-between gap-3 rounded-md border border-ink px-3 py-2.5">
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-ink">{s.item.title}</div>
+                    <div className="text-[0.7rem] text-ink-dim">Sugerido por el plan · {s.reasons.slice(0, 2).join(" · ")}</div>
+                  </div>
+                  <Link
+                    href={s.item.id === "plan:followups" ? "/dashboard/agencia/leads" : "/dashboard/agencia/prospecting"}
+                    className="flex-none rounded-md bg-ink px-3 py-2 text-xs font-medium text-bg"
+                  >
+                    Registrar
+                  </Link>
+                </li>
+              ))}
+            </TierSection>
+            {p0.length === 0 && planActions.length === 0 && (
+              <p className="text-xs text-ink-dim">
+                Sin P0 para hoy. Los P0 vienen de tus rutinas, de un plan aprobado o de tus{" "}
+                <Link href="/dashboard/configuracion" className="underline underline-offset-2">reglas de prioridad</Link>.
               </p>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <Stat label="Profundo" value={hours(capacity.minutes.deep)} hint={`asignado ${hours(ranking.allocated.deep)}`} />
-                <Stat label="Ligero" value={hours(capacity.minutes.shallow)} hint={`asignado ${hours(ranking.allocated.shallow)}`} />
-                <Stat label="Pasivo (transporte)" value={hours(capacity.minutes.passive)} hint={`asignado ${hours(ranking.allocated.passive)}`} />
-                <Stat label="Total utilizable" value={hours(usable)} hint={capacity.unplanned > 0 ? `${hours(capacity.unplanned)} sin planear` : undefined} />
-              </div>
+            )}
+            <TierSection title="P1 — Capacidad" items={p1} />
+            {p2.length > 0 && (
+              <details>
+                <summary className="cursor-pointer select-none text-xs font-semibold text-ink-dim">P2 — Secundario ({p2.length})</summary>
+                <ul className="mt-2 flex flex-col gap-2">
+                  {p2.map((i) => (
+                    <ItemRow key={i.id} item={i} />
+                  ))}
+                </ul>
+              </details>
             )}
           </div>
         </Card>
 
-        {/* MODO ADAPTATIVO ------------------------------------------------- */}
+        {/* PENDIENTES DE DÍAS ANTERIORES (modo adaptativo) ------------------------------------- */}
         {missed.length > 0 && (
           <Card>
-            <CardHeader
-              title="Pendientes de días anteriores"
-              icon={<AlertTriangle size={16} className="text-warn" />}
-              action={<Badge tone="warn">{missed.length}</Badge>}
-            />
-            <p className="px-5 -mt-1 mb-2 text-xs text-ink-dim">
-              No se mueven solas: decide por qué no se hicieron y qué hacer. El motivo queda registrado para aprender.
-            </p>
+            <CardHeader title="Pendientes de días anteriores" icon={<AlertTriangle size={16} className="text-warn" />} action={<Badge tone="warn">{missed.length}</Badge>} />
+            <p className="px-5 -mt-1 mb-2 text-xs text-ink-dim">Vencida no significa no hecha: decide qué pasó y qué hacer. El motivo queda registrado.</p>
             <ul className="px-5 pb-4 flex flex-col gap-2">
               {missed.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-3 border-t border-border pt-2 first:border-t-0">
@@ -182,146 +222,171 @@ export default async function TodayPage() {
           </Card>
         )}
 
-        {/* TOP 3 ----------------------------------------------------------- */}
-        <Card>
-          <CardHeader title="Las 3 prioridades de hoy" icon={<Sun size={16} className="text-ink-dim" />} />
-          {ranking.top.length === 0 ? (
-            <EmptyState
-              title="Nada que priorizar todavía"
-              description="Crea tareas ligadas a tu meta o completa el plan para que el sistema calcule la cuota de prospección."
-              action={<LinkButton href="/dashboard/tasks">+ Nueva tarea</LinkButton>}
-            />
-          ) : (
-            <ol className="px-5 pb-5 flex flex-col gap-3">
-              {ranking.top.map((s, i) => (
-                <PriorityItem key={s.item.id} rank={i + 1} scored={s} />
-              ))}
-            </ol>
-          )}
-        </Card>
+        {/* MÁS DEL DÍA: colapsado mientras haya P0 pendiente (fricción, no bloqueo) ----------- */}
+        <details open={score.p0Pending === 0} className="group">
+          <summary className="flex cursor-pointer select-none items-center gap-1 text-sm font-medium text-ink-dim hover:text-ink">
+            <ChevronRight size={14} className="transition-transform group-open:rotate-90" />
+            Más del día {score.p0Pending > 0 && "(disponible; primero tu P0)"}
+          </summary>
+          <div className="mt-4 flex flex-col gap-4">
+            {analytics && analytics.dayDiff.length > 0 && (
+              <Card>
+                <CardHeader title="¿Qué cambió desde ayer?" icon={<Activity size={16} className="text-ink-dim" />} />
+                <ul className="px-5 pb-4 flex flex-col gap-1">
+                  {analytics.dayDiff.map((d) => (
+                    <li key={d.key} className="flex justify-between gap-3 text-xs">
+                      <span className="text-ink">{d.label}</span>
+                      <span className="tabular-nums text-ink-dim">
+                        ayer {d.key === "revenue" ? money(d.yesterday) : d.yesterday} → hoy{" "}
+                        <span className={d.delta > 0 ? "text-good" : "text-warn"}>{d.key === "revenue" ? money(d.today) : d.today}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
 
-        {(ranking.secondary.length > 0 || ranking.excluded.length > 0) && (
-          <Card>
-            <details className="px-5 py-4">
-              <summary className="cursor-pointer select-none text-sm font-medium text-ink">
-                Secundarias ({ranking.secondary.length + ranking.excluded.length})
-              </summary>
-              <ul className="mt-3 flex flex-col gap-2">
-                {[...ranking.secondary, ...ranking.excluded].map((s) => (
-                  <li key={s.item.id} className="flex items-start gap-2.5 text-sm">
-                    {s.item.kind === "task" ? <TaskDoneToggle taskId={s.item.id} done={false} /> : <span className="w-4" />}
-                    <div className="min-w-0">
-                      <div className="text-ink">{s.item.title}</div>
-                      <div className="text-xs text-ink-dim">
-                        score {s.score}
-                        {s.note ? ` · ${s.note}` : ""}
-                      </div>
-                    </div>
+            {ranking.top.filter((s) => s.item.kind === "task").length > 0 && (
+              <Card>
+                <CardHeader title="Siguientes sugeridas (fuera de hoy)" />
+                <ul className="px-5 pb-4 flex flex-col gap-2">
+                  {ranking.top
+                    .filter((s) => s.item.kind === "task" && !day.items.some((i) => i.id === s.item.id))
+                    .map((s) => (
+                      <li key={s.item.id} className="flex items-start gap-2.5 text-sm">
+                        <TaskDoneToggle taskId={s.item.id} done={false} />
+                        <div className="min-w-0">
+                          <div className="text-ink">{s.item.title}</div>
+                          <div className="text-xs text-ink-dim">{s.reasons.join(" · ")}</div>
+                        </div>
+                      </li>
+                    ))}
+                </ul>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader
+                title="Tiempo disponible hoy"
+                icon={<Clock size={16} className="text-ink-dim" />}
+                action={
+                  <Link href="/dashboard/capacity" className="text-xs text-ink-dim hover:text-ink">
+                    Editar
+                  </Link>
+                }
+              />
+              <div className="px-5 pb-5">
+                {!capacity.configured ? (
+                  <p className="text-sm text-ink-dim">
+                    Sin bloques de capacidad para hoy. <Link href="/dashboard/capacity" className="underline underline-offset-2">Define tu semana tipo</Link>.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                    <Stat label="Profundo" value={hours(capacity.minutes.deep)} />
+                    <Stat label="Ligero" value={hours(capacity.minutes.shallow)} />
+                    <Stat label="Pasivo" value={hours(capacity.minutes.passive)} />
+                    <Stat label="Total utilizable" value={hours(usable)} />
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card>
+              <CardHeader
+                title="Registrar tiempo"
+                icon={<Timer size={16} className="text-ink-dim" />}
+                action={
+                  <Link href="/dashboard/time" className="text-xs text-ink-dim hover:text-ink">
+                    Ver semana
+                  </Link>
+                }
+              />
+              <div className="px-5 pb-5">
+                <QuickTimeLog today={today} />
+              </div>
+            </Card>
+
+            {sht && <SerHacerTenerCard data={sht} today={today} />}
+
+            <Card>
+              <CardHeader title="Agenda" icon={<Calendar size={16} className="text-ink-dim" />} />
+              <ul className="px-5 pb-4 flex flex-col gap-1">
+                {capacity.blocks.map((b) => (
+                  <li key={`b-${b.id}`} className="flex items-center justify-between gap-2 py-1 text-xs text-ink-dim">
+                    <span>{b.label}</span>
+                    <span className="font-mono">
+                      {b.start_time.slice(0, 5)}–{b.end_time.slice(0, 5)}
+                    </span>
                   </li>
                 ))}
+                {events.map((ev) => (
+                  <li key={ev.id} className="flex items-center justify-between gap-2 py-1.5 border-t border-border">
+                    <span className="text-sm text-ink">{ev.title}</span>
+                    <Badge tone="neutral" className="font-mono">
+                      {new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone }).format(new Date(ev.starts_at))}
+                    </Badge>
+                  </li>
+                ))}
+                {capacity.blocks.length === 0 && events.length === 0 && <li className="text-xs text-ink-dim">Sin eventos programados.</li>}
               </ul>
-            </details>
-          </Card>
-        )}
-
-        {doneToday.length > 0 && (
-          <Card>
-            <CardHeader
-              title="Completadas hoy"
-              icon={<CheckCircle2 size={16} className="text-good" />}
-              action={<Badge tone="good">{doneToday.length}</Badge>}
-            />
-            <ul className="px-5 pb-4 flex flex-col gap-1.5">
-              {doneToday.map((t) => (
-                <li key={t.id} className="flex items-start gap-2.5 text-sm text-ink-dim line-through">
-                  <TaskDoneToggle taskId={t.id} done />
-                  {t.title}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader
-            title="Registrar tiempo"
-            icon={<Timer size={16} className="text-ink-dim" />}
-            action={
-              <Link href="/dashboard/time" className="text-xs text-ink-dim hover:text-ink">
-                Ver semana
-              </Link>
-            }
-          />
-          <div className="px-5 pb-5">
-            <QuickTimeLog today={today} />
+            </Card>
           </div>
-        </Card>
-
-        {/* SER → HACER → TENER --------------------------------------------- */}
-        {sht && <SerHacerTenerCard data={sht} today={today} />}
-
-        <Card>
-          <CardHeader title="Agenda" icon={<Calendar size={16} className="text-ink-dim" />} />
-          {events.length === 0 && !capacity.configured ? (
-            <EmptyState title="Sin eventos programados" />
-          ) : (
-            <ul className="px-5 pb-4 flex flex-col gap-1">
-              {capacity.blocks.map((b) => (
-                <li key={`b-${b.id}`} className="flex items-center justify-between gap-2 py-1 text-xs text-ink-dim">
-                  <span>{b.label}</span>
-                  <span className="font-mono">
-                    {b.start_time.slice(0, 5)}–{b.end_time.slice(0, 5)}
-                  </span>
-                </li>
-              ))}
-              {events.map((ev) => (
-                <li key={ev.id} className="flex items-center justify-between gap-2 py-1.5 border-t border-border">
-                  <span className="text-sm text-ink">{ev.title}</span>
-                  <Badge tone="neutral" className="font-mono">
-                    {new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone }).format(
-                      new Date(ev.starts_at)
-                    )}
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
+        </details>
       </div>
     </main>
   );
 }
 
-function PriorityItem({ rank, scored }: { rank: number; scored: ScoredAction }) {
-  const { item } = scored;
-  const lever = item.lever ? (TASK_LEVER_LABEL[item.lever as TaskLever] ?? item.lever) : null;
-  const mode = item.execution_mode ? EXECUTION_MODE_LABEL[item.execution_mode as keyof typeof EXECUTION_MODE_LABEL] : null;
+function progressText(i: DayItem): string {
+  if (i.target_qty !== null) {
+    const actual = i.completion.actual;
+    return `${actual === null ? 0 : Math.round(actual).toLocaleString("es-CO")}/${i.target_qty.toLocaleString("es-CO")} ${i.unit ?? ""}`.trim();
+  }
+  return i.title;
+}
+
+function TierSection({ title, items, emphasis, children }: { title: string; items: DayItem[]; emphasis?: boolean; children?: React.ReactNode }) {
+  if (items.length === 0 && !children) return null;
   return (
-    <li className="flex items-start gap-3 border-t border-border pt-3 first:border-t-0 first:pt-0">
-      <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-ink text-bg text-xs font-semibold">
-        {rank}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <span className="text-sm font-medium text-ink">{item.title}</span>
-          {item.kind === "task" ? (
-            <TaskDoneToggle taskId={item.id} done={false} />
-          ) : (
-            <Link
-              href={item.id === "plan:followups" ? "/dashboard/agencia/leads" : "/dashboard/agencia/prospecting"}
-              className="text-xs font-medium text-ink-dim hover:text-ink whitespace-nowrap"
-            >
-              Registrar →
-            </Link>
-          )}
+    <section>
+      <h3 className={`mb-2 text-xs font-semibold ${emphasis ? "text-ink" : "text-ink-dim"}`}>{title}</h3>
+      <ul className="flex flex-col gap-2">
+        {items.map((i) => (
+          <ItemRow key={i.id} item={i} emphasis={emphasis} />
+        ))}
+        {children}
+      </ul>
+    </section>
+  );
+}
+
+function ItemRow({ item, emphasis }: { item: DayItem; emphasis?: boolean }) {
+  const done = item.completion.complete;
+  const quantified = item.target_qty !== null;
+  return (
+    <li className={`rounded-md border px-3 py-2.5 ${emphasis && !done ? "border-ink" : "border-border"} ${done ? "opacity-60" : ""}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <TierControl taskId={item.id} info={item.tierInfo} />
+          <span className={`text-sm ${done ? "line-through text-ink-dim" : emphasis ? "font-medium text-ink" : "text-ink"}`}>{item.title}</span>
         </div>
-        <div className="flex flex-wrap gap-1.5 mt-1">
-          {lever && <Badge tone="neutral">{lever}</Badge>}
-          {mode && <Badge tone="neutral">{mode.split(" (")[0]}</Badge>}
-          {item.estimated_minutes !== null && <Badge tone="neutral">{hours(item.estimated_minutes)}</Badge>}
-        </div>
-        <p className="text-xs text-ink-dim mt-1">Por qué: {scored.reasons.join(" · ")}</p>
+        {quantified && item.metric_key && item.recordHref ? (
+          <Link href={item.recordHref} className="flex-none rounded-md bg-ink px-3 py-2 text-xs font-medium text-bg">
+            Registrar
+          </Link>
+        ) : (
+          <TaskDoneToggle taskId={item.id} done={item.done} />
+        )}
       </div>
+      {quantified && (
+        <div className="mt-2 flex items-center gap-2">
+          <ProgressBar value={(item.completion.progress ?? 0) * 100} className="flex-1" />
+          <span className="text-xs tabular-nums text-ink-dim whitespace-nowrap">
+            {progressText(item)}
+            {item.metric_key && item.completion.actual === null ? " · sin datos aún" : ""}
+          </span>
+        </div>
+      )}
     </li>
   );
 }

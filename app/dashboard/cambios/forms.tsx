@@ -57,7 +57,7 @@ export function SetActions({ id, status, kind }: { id: string; status: string; k
   );
 }
 
-export function GoalChangeForm({ goalId, defaults }: { goalId: string; defaults: { title: string; unit: string; currency: string; deadline: string } }) {
+export function GoalChangeForm({ goalId, defaults }: { goalId: string; defaults: { title: string; unit: string; currency: string; deadline: string; startDate: string } }) {
   const [state, action, pending] = useActionState(proposeGoalChange, initialActionState);
   return (
     <form action={action} className="flex flex-col gap-3">
@@ -79,6 +79,9 @@ export function GoalChangeForm({ goalId, defaults }: { goalId: string; defaults:
           <Input id="gc-deadline" name="deadline" type="date" defaultValue={defaults.deadline} required />
         </Field>
       </div>
+      <Field label="Desde cuándo se mide (para el ritmo real)" htmlFor="gc-start">
+        <Input id="gc-start" name="start_date" type="date" defaultValue={defaults.startDate} />
+      </Field>
       <label className="flex items-center gap-2 text-xs text-ink-dim">
         <input type="checkbox" name="measure_received" defaultChecked />
         Medir el progreso con el dinero efectivamente recibido (revenue_receipts)
