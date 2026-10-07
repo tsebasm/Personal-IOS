@@ -15,7 +15,7 @@ const schema = z
     started_on: z.string().min(1, "La fecha de inicio es obligatoria."),
     ended_on: z.string().optional(),
     status: z.enum(["running", "finished"]),
-    decision: z.enum(["keep", "change", "inconclusive"]).optional(),
+    decision: z.enum(["keep", "revert", "modify", "inconclusive"]).optional(),
     learning: z.string().trim().max(4000).optional(),
   })
   .refine((d) => d.status !== "finished" || !!d.decision, "Al terminar un experimento, registra la decisión.");

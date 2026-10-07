@@ -1735,12 +1735,14 @@ Sin embargo, normalmente solo debe existir una meta dominante activa.
 Estados posibles:
 
 ```
-BLOQUEADA
+BLOQUEADA (no activable)
 EN COLA
 ACTIVA
 COMPLETADA
 ARCHIVADA
 ```
+
+> **Enmienda C-2 (aprobada 2026-10-06):** "BLOQUEADA (no activable)" (`activation_state = 'blocked'`) es un concepto distinto del **bloqueo de la meta activa** de §11 (`locked_at`: la meta no admite modificaciones casuales). Ambos se mantienen diferenciados en el modelo y en la interfaz.
 
 ---
 
@@ -3588,5 +3590,23 @@ Cambios a esta especificación aprobados explícitamente por el usuario. El deta
 | P-13 | 2026-10-06 | §67, §100, §101 | Origen (`origin`, `origin_change_item_id`, `created_by`), versión y archivado en todas las entidades de estrategia y ejecución. |
 | P-14 | 2026-10-06 | §36, §54, §68 | Métricas y funnels como datos (no como código). VANT es una instancia, no la arquitectura. |
 | P-15 | 2026-10-06 | §8, §23 | OBJETIVOS ↔ SISTEMAS es una relación de muchos a muchos. |
+
+**Decisiones de arquitectura de A2:**
+
+| ID | Fecha | Sección | Decisión |
+|---|---|---|---|
+| C-1 | 2026-10-06 | §10, §54, §68 | **Moneda:** COP es la moneda operativa de registro (los ingresos se guardan en COP, también los existentes). USD es la unidad en la que se expresa y evalúa la meta. El progreso convierte el acumulado **reconocido** en COP a USD con una tasa de referencia explícita (`fx_rates`: fecha, fuente, trazabilidad). La meta nunca se guarda como equivalente en COP. Ver la política de tasa más abajo. |
+| C-2 | 2026-10-06 | §11, §56 | `locked_at` (meta activa inmutable) ≠ `activation_state='blocked'` (meta secundaria no activable). |
+| C-3 | 2026-10-06 | §43, P-10 | `change_sets` es la única autoridad de aprobación y aplicación de paquetes de cambios. Una decisión vinculada refleja ese ciclo; EVALUADA es exclusivo de la decisión. Claude nunca aprueba sus propias propuestas. |
+| C-4 | 2026-10-06 | §40 | Decisión de un experimento: `keep` (mantener) · `revert` (revertir al valor anterior) · `modify` (modificar antes de continuar) · `inconclusive` (sin ganador por falta de evidencia). Los registros previos `change` se migran a `modify`. |
+
+**Política de tasa de cambio (C-1):**
+1. **Tasa de referencia:** se usa la tasa USD→COP más reciente registrada por el usuario con `rate_date ≤` la fecha de evaluación.
+2. **Vigencia máxima: 31 días.** Si no existe ninguna tasa, o la más reciente es más antigua, el progreso en USD se muestra como **pendiente de conversión** y solo se muestra el acumulado en COP. Nunca se usa una cifra estimada presentada como exacta.
+3. **No hay tasas en el código.** Toda tasa es un dato con fecha, fuente y referencia.
+4. **Actualizar la tasa no reescribe nada.** Los ingresos originales en COP no cambian; solo cambia el equivalente calculado. Las revisiones guardan la tasa usada en su snapshot.
+5. **Transparencia:** la interfaz muestra la meta en USD, el progreso en USD (o pendiente), el acumulado original en COP, el % de cumplimiento y la tasa usada con su fecha y fuente.
+
+**Pendiente de decisión del usuario:** la spec no define qué cuenta como **ingreso reconocido**. Ver el informe de A2.
 
 **Meta activa (decisión del usuario, 2026-10-06):** 5.000 USD acumulados antes del 2026-12-31, bloqueada. La moneda principal es USD; las equivalencias en COP son solo una representación secundaria. La descomposición comercial (clientes × precio) **no** es parte de la meta: se modela como objetivos, hipótesis o escenarios derivados.

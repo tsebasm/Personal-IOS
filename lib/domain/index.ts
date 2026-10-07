@@ -8,3 +8,5 @@ export * from "./strategy";
 export * from "./execution";
 export * from "./intelligence";
 export * from "./registry";
+export * from "./finance";
+export * from "./legacy";

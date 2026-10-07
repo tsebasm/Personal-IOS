@@ -23,6 +23,7 @@ import {
 
 const num = z.number().finite();
 const optNum = num.nullable().default(null);
+const score15 = z.number().int().min(1).max(5).nullable().default(null);
 
 // META (L0) §10–11, §56 ------------------------------------------------------
 
@@ -163,8 +164,16 @@ export const hypothesisShape = (fk: FkSchema) =>
     timeline: optText,
     assumptions: z.array(z.object({ statement: text, assumption_type: assumptionType })).default([]),
     risks: z.array(z.object({ kind: z.enum(RISK_KINDS), description: text })).default([]),
-    confidence_level: confidenceLevel.default("low"),
-    test_status: z.enum(HYPOTHESIS_TEST_STATUSES).default("untested"),
+    /** null en filas previas a 0017: no se deriva del puntaje legado 0–100. */
+    confidence_level: confidenceLevel.nullable().default("low"),
+    /** Columna existente `hypotheses.status` (0011). */
+    status: z.enum(HYPOTHESIS_TEST_STATUSES).default("untested"),
+    /** Atributos existentes de 0011 (escala 1–5). */
+    urgency: score15,
+    ability_to_pay: score15,
+    competition: score15,
+    offer_potential: score15,
+    source: optText,
     validation_criteria: optText,
     failure_criteria: optText,
     evidence: optText,

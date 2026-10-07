@@ -12,6 +12,10 @@ import {
   tempRefsIn,
   uuid,
   validateChangeSet,
+  taskStatusFromRow,
+  LEGACY_GOAL_ACTIVATION,
+  fxRateShape,
+  changeSetShape,
 } from "./index";
 
 const GOAL_ID = "11111111-1111-4111-8111-111111111111";
@@ -227,5 +231,46 @@ describe("change sets (P-10)", () => {
     );
     const codes = res.errors.map((e) => e.code);
     expect(codes).toEqual(expect.arrayContaining(["create_with_id", "missing_entity_id", "unknown_entity"]));
+  });
+});
+
+describe("A2: vocabularios heredados, moneda y permisos", () => {
+  it("traduce estados de tareas existentes a §26 sin perder el de planificación", () => {
+    expect(taskStatusFromRow({ status: "today" })).toEqual({ status: "pending", plan_state: "today" });
+    expect(taskStatusFromRow({ status: "done" })).toEqual({ status: "completed", plan_state: null });
+    expect(taskStatusFromRow({ status: "waiting" })).toEqual({ status: "blocked", plan_state: null });
+    expect(taskStatusFromRow({ status: "pending", plan_state: "next" })).toEqual({ status: "pending", plan_state: "next" });
+    expect(LEGACY_GOAL_ACTIVATION.pausado).toBe("queued");
+  });
+
+  it("una tasa de cambio exige monedas distintas, valor positivo y fuente", () => {
+    const ok = { base_currency: "USD", quote_currency: "COP", rate: 3900, rate_date: "2026-10-01", source: "TRM" };
+    expect(fxRateShape(uuid).safeParse(ok).success).toBe(true);
+    expect(fxRateShape(uuid).safeParse({ ...ok, quote_currency: "USD" }).success).toBe(false);
+    expect(fxRateShape(uuid).safeParse({ ...ok, rate: 0 }).success).toBe(false);
+    expect(fxRateShape(uuid).safeParse({ ...ok, source: "" }).success).toBe(false);
+  });
+
+  it("Claude no propone tasas de cambio; nadie modifica una tasa por change set", () => {
+    const payload = { base_currency: "USD", quote_currency: "COP", rate: 3900, rate_date: "2026-10-01", source: "TRM" };
+    expect(validateChangeSet([item(1, { entity_type: "fx_rate", payload })], "claude").errors.map((e) => e.code)).toContain("claude_cannot_propose_data");
+    expect(validateChangeSet([item(1, { entity_type: "fx_rate", payload })], "user").ok).toBe(true);
+    const upd = validateChangeSet([item(1, { entity_type: "fx_rate", op: "update", entity_id: GOAL_ID, sensitivity: "locked", payload: { rate: 1 } })], "user");
+    expect(upd.errors.map((e) => e.code)).toContain("locked_change");
+  });
+
+  it("C-4: decisiones de experimento keep/revert/modify/inconclusive; 'change' ya no existe", () => {
+    const base = { name: "x", metric_key: "replies", sample_target: 10, status: "evaluated" };
+    for (const d of ["keep", "revert", "modify", "inconclusive"]) {
+      expect(proposalSchema("experiment", "create").safeParse({ ...base, decision: d }).success).toBe(true);
+    }
+    expect(proposalSchema("experiment", "create").safeParse({ ...base, decision: "change" }).success).toBe(false);
+    expect(proposalSchema("experiment", "create").safeParse({ ...base, decision: null }).success).toBe(false);
+  });
+
+  it("C-3: un change set solo puede quedar aprobado por el usuario", () => {
+    const cs = { title: "plan", proposed_by: "claude" };
+    expect(changeSetShape.safeParse({ ...cs, approved_by: "user" }).success).toBe(true);
+    expect(changeSetShape.safeParse({ ...cs, approved_by: "claude" }).success).toBe(false);
   });
 });

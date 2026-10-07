@@ -21,7 +21,7 @@ export type Experiment = {
   started_on: string;
   ended_on: string | null;
   status: "running" | "finished";
-  decision: "keep" | "change" | "inconclusive" | null;
+  decision: "keep" | "revert" | "modify" | "inconclusive" | null;
   learning: string | null;
 };
 
@@ -104,7 +104,8 @@ function ExperimentFormModal({
               <Select id={`${p}-decision`} name="decision" defaultValue={initial?.decision ?? ""}>
                 <option value="">—</option>
                 <option value="keep">Mantener</option>
-                <option value="change">Cambiar</option>
+                <option value="revert">Revertir</option>
+                <option value="modify">Modificar</option>
                 <option value="inconclusive">No concluyente</option>
               </Select>
             </Field>

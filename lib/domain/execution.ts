@@ -69,7 +69,8 @@ export const taskObject = (fk: FkSchema) =>
     description: optText,
     status: z.enum(TASK_STATUSES).default("pending"),
     plan_state: z.enum(TASK_PLAN_STATES).nullable().default(null),
-    tier: tier.default("p2"),
+    /** null = sin clasificar todavía (las tareas existentes no se reclasifican solas). */
+    tier: tier.nullable().default(null),
     goal_id: fk.nullable().default(null),
     objective_id: fk.nullable().default(null),
     system_id: fk.nullable().default(null),
@@ -182,7 +183,7 @@ export const dailyLogShape = (_fk: FkSchema) =>
 export const habitShape = (fk: FkSchema) =>
   z.object({
     title: text,
-    tier: tier.default("p1"),
+    tier: tier.nullable().default(null),
     system_id: fk.nullable().default(null),
     goal_id: fk.nullable().default(null),
     frequency: z.enum(["diaria", "semanal", "custom"]).default("diaria"),

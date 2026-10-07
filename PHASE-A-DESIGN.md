@@ -207,3 +207,52 @@ Nada de esto se elimina conceptualmente: el modelo lo soporta desde la Fase A.
 | A6 | Proveedores de métricas (VANT como instancia) + seed demo VANT como **datos** | Las pantallas actuales siguen iguales |
 | A7 | Contrato con Obsidian (IDs, frontmatter, fuente de verdad, conflictos) como tipos y tests | Tests del parser |
 | A8 | Actualizar `SPEC-MATRIX.md` | Matriz al día |
+
+---
+
+## 9. Contrato de estados: change sets ↔ decisiones (C-3, aprobado 2026-10-06; se implementa en A3)
+
+**Autoridad única:** `change_sets.status` decide aprobación y aplicación. `decisions.status` refleja ese ciclo y agrega EVALUADA, que es exclusivo suyo.
+
+### 9.1 Transiciones de `change_sets`
+
+| De → A | Quién | Condición | Efecto en la decisión vinculada |
+|---|---|---|---|
+| (nuevo) → `draft` | user / claude / system | `validateChangeSet` puede tener errores | — |
+| `draft` → `proposed` | quien la creó | `validateChangeSet().ok`; si hay ítems `strategic`, se crea la decisión (`status='proposed'`, `proposed_by` = el del set, `change_set_id`) | se crea en `proposed` |
+| `proposed` → `approved` | **user** | todos los ítems `approved`; `approved_by='user'`, `approved_at` (la DB lo exige, 0018) | `approved`, `approved_at` |
+| `proposed` → `partially_approved` | **user** | ≥1 ítem `approved` y ≥1 `rejected`; los aprobados no dependen de un rechazado | `modified` (la decisión registra qué se aprobó) |
+| `proposed` → `rejected` | **user** | todos los ítems `rejected` | `rejected` |
+| `approved` / `partially_approved` → `applied` | sistema (`applyChangeSet`, sesión del usuario) | una transacción; aplica solo los ítems `approved` en orden topológico; marca los ítems `applied`; `applied_at` | `implemented`, `implemented_at`, `after` |
+| `approved` / `partially_approved` → `failed` | sistema | error en la transacción: **rollback completo**, ninguna entidad creada; `failure_reason` | queda en `approved`/`modified` (nada se implementó) |
+| `failed` → `proposed` | user | reintento tras corregir | vuelve a `proposed` |
+| `applied`, `rejected` → cualquiera | — | **prohibido** (trigger 0018) | — |
+
+`decisions`: `implemented` → `evaluated` lo hace solo el usuario, con `actual_result` y `conclusion`. No depende del change set.
+
+### 9.2 Invariantes (cada uno con su prueba en A3)
+
+1. Claude nunca aprueba: `approved_by` solo puede ser `'user'` (CHECK, 0018). Además, la acción de aprobación del servidor rechaza la llamada si se origina en una herramienta de Claude.
+2. Ningún set queda `approved`/`applied` sin `approved_at` (CHECK, 0018).
+3. Un set con ítems `strategic` no puede pasar a `proposed` sin decisión vinculada, ni a `applied` si su decisión no está `approved`/`modified`.
+4. Ítems `locked` no se pueden proponer (`validateChangeSet`, A1). El cambio de meta usa su propio flujo (§11).
+5. `applied` es atómico: o todas las entidades aprobadas del set existen con `origin_change_item_id`, o ninguna.
+6. Estados contradictorios prohibidos: decisión `implemented` con set no `applied`, o decisión `rejected` con set `approved`. `applyChangeSet` actualiza ambos en la misma transacción.
+
+---
+
+## 10. Moneda: mapa de consistencia (C-1)
+
+Una sola función, `moneyGoalProgress` (`lib/engine/fx.ts`), convierte **el acumulado reconocido**. Ningún otro módulo convierte monedas. Estado actual y qué cambia:
+
+| Lugar | Hoy | Cambio (fase) |
+|---|---|---|
+| `lib/engine/fx.ts` | **Nuevo (A2):** tasa de referencia, vigencia de 31 días, `pending` sin tasa | — |
+| `fx_rates` (0017) | **Nuevo (A2):** dato con fecha, fuente, referencia y RLS | UI de registro de tasa (B) |
+| `lib/engine/metrics-registry.ts` | `revenue_cumulative` en COP | Se vuelve definición de datos con moneda COP (P-14, A6) |
+| `lib/engine/plan.ts` / `gap.ts` | Progreso con `current_value` en la unidad de la meta | Para metas monetarias, el progreso viene de `moneyGoalProgress` (B) |
+| `lib/format.ts` `money()` | Siempre COP | `money(amount, currency)` (B) |
+| HOY / Plan / Agencia / rollup | Muestran COP | Meta en USD + equivalente o "pendiente de conversión" + COP original + tasa, fecha y fuente (B) |
+| Revisiones (snapshot) | Sin tasa | El snapshot guarda la tasa usada (C) |
+
+**Bloqueo abierto:** qué cuenta como **ingreso reconocido**. Ver el informe de A2.

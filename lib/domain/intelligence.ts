@@ -58,8 +58,12 @@ export const changeSetShape = z.object({
   rationale: optText,
   proposed_by: actor,
   status: z.enum(CHANGE_SET_STATUSES).default("draft"),
+  /** C-3: solo el usuario aprueba; la base de datos lo exige (0018). */
+  approved_by: z.literal("user").nullable().default(null),
+  approved_at: timestamp.nullable().default(null),
   decision_id: uuid.nullable().default(null),
   applied_at: timestamp.nullable().default(null),
+  failure_reason: optText,
 });
 
 export const CHANGE_OPS = ["create", "update", "archive"] as const;

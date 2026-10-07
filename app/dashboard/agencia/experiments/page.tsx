@@ -12,7 +12,7 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { AgenciaTabs } from "../tabs";
 import { CreateExperimentButton, EditExperimentButton, METRIC_LABEL, type Experiment } from "./experiment-form";
 
-const DECISION_LABEL: Record<string, string> = { keep: "Mantener", change: "Cambiar", inconclusive: "No concluyente" };
+const DECISION_LABEL: Record<string, string> = { keep: "Mantener", revert: "Revertir", modify: "Modificar", inconclusive: "No concluyente" };
 const ratio = (v: number | null) => (v === null ? "—" : `${(v * 100).toFixed(1)}%`);
 
 export default async function ExperimentsPage() {
