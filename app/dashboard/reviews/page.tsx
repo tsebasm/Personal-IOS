@@ -28,6 +28,13 @@ export default async function ReviewsPage() {
 
   const reviews = data ?? [];
   const analytics = await loadAnalytics();
+  // Días cerrados (§35, B4): snapshots inmutables. Consulta aparte: si falta 0022, la página sigue.
+  const { data: dayLogs } = await supabase
+    .from("daily_logs")
+    .select("id, date, mission, execution_score, tiers, minutes_worked, learnings, tomorrow, closed_at, daily_log_metrics(metric_key, target, actual)")
+    .not("closed_at", "is", null)
+    .order("date", { ascending: false })
+    .limit(14);
   const thisWeek = analytics ? reviews.find((r) => r.type === "semanal" && r.period_start === analytics.current.start) : null;
   const thisWeekContent = (thisWeek?.content ?? {}) as { analysis?: string; adjustments?: string };
 
@@ -51,6 +58,37 @@ export default async function ReviewsPage() {
               initialAdjustments={thisWeekContent.adjustments ?? ""}
             />
           </div>
+        </Card>
+      )}
+
+      {(dayLogs ?? []).length > 0 && (
+        <Card className="mb-6">
+          <CardHeader title="Días cerrados" />
+          <ul className="px-5 pb-5 flex flex-col gap-3">
+            {(dayLogs ?? []).map((d) => {
+              const tiers = d.tiers as { p0: { planned: number; done: number } } | null;
+              const metrics = (d.daily_log_metrics ?? []) as { metric_key: string; target: number | null; actual: number | null }[];
+              return (
+                <li key={d.id} className="border-t border-border pt-3 first:border-t-0 first:pt-0">
+                  <div className="flex justify-between gap-3 text-sm">
+                    <span className="text-ink">{d.date}</span>
+                    <span className="tabular-nums text-ink-dim">
+                      ejecución {d.execution_score === null ? "—" : `${Number(d.execution_score)}%`}
+                      {tiers ? ` · P0 ${tiers.p0.done}/${tiers.p0.planned}` : ""}
+                    </span>
+                  </div>
+                  {d.mission && <div className="text-xs text-ink-dim">{d.mission}</div>}
+                  {metrics.length > 0 && (
+                    <div className="text-xs text-ink-dim">
+                      {metrics.map((m) => `${m.metric_key} ${m.actual === null ? "sin datos" : Number(m.actual)}/${m.target === null ? "—" : Number(m.target)}`).join(" · ")}
+                    </div>
+                  )}
+                  {(d.learnings ?? []).length > 0 && <div className="text-xs text-ink">Aprendí: {(d.learnings as string[]).join("; ")}</div>}
+                  {(d.tomorrow ?? []).length > 0 && <div className="text-xs text-ink-dim">Mañana: {(d.tomorrow as string[]).join("; ")}</div>}
+                </li>
+              );
+            })}
+          </ul>
         </Card>
       )}
 

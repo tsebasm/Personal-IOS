@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity, AlertTriangle, Calendar, CheckCircle2, ChevronRight, Clock, Lock, Sun, Target, Timer } from "lucide-react";
+import { Activity, AlertTriangle, Calendar, CheckCircle2, ChevronRight, Clock, Lock, Moon, Sun, Target, Timer } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { friendlyDate, shiftIsoDate, startOfDayInTimezone } from "@/lib/date";
 import { loadTodayContext } from "@/lib/data/today";
@@ -17,6 +17,7 @@ import { loadAnalytics } from "@/lib/data/analytics";
 import { SerHacerTenerCard } from "./ser-hacer-tener";
 import { ResolveMissedButton, TaskDoneToggle } from "./task-controls";
 import { QuickTimeLog } from "@/components/quick-time-log";
+import { CloseDayForm } from "./close-day";
 
 const hours = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${min % 60 ? `${min % 60}m` : ""}`.trim() : `${min}m`);
 
@@ -40,7 +41,7 @@ export default async function TodayPage() {
   const supabase = await createClient();
   const { today, timezone, planCtx, capacity, ranking, missed } = ctx;
 
-  const [day, sht, analytics, { data: eventsData }] = await Promise.all([
+  const [day, sht, analytics, { data: eventsData }, { data: dayLog }] = await Promise.all([
     loadDayExecution(supabase, today, timezone),
     loadSerHacerTener(),
     loadAnalytics(),
@@ -50,6 +51,8 @@ export default async function TodayPage() {
       .gte("starts_at", startOfDayInTimezone(today, timezone))
       .lt("starts_at", startOfDayInTimezone(shiftIsoDate(today, 1), timezone))
       .order("starts_at"),
+    // Registro del día (0017/0022); si la tabla falta, simplemente no hay cierre.
+    supabase.from("daily_logs").select("closed_at, execution_score").eq("date", today).maybeSingle(),
   ]);
   const events = eventsData ?? [];
 
@@ -198,6 +201,27 @@ export default async function TodayPage() {
                     <ItemRow key={i.id} item={i} />
                   ))}
                 </ul>
+              </details>
+            )}
+          </div>
+        </Card>
+
+        {/* CERRAR EL DÍA (§35): snapshot inmutable ---------------------------------------------- */}
+        <Card>
+          <CardHeader title="Cierre del día" icon={<Moon size={16} className="text-ink-dim" />} />
+          <div className="px-5 pb-5">
+            {dayLog?.closed_at ? (
+              <p className="text-sm text-ink-dim">
+                Día cerrado a las{" "}
+                {new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: timezone }).format(new Date(dayLog.closed_at))} ·
+                ejecución {dayLog.execution_score === null ? "—" : `${Number(dayLog.execution_score)}%`}. Queda en Revisiones.
+              </p>
+            ) : (
+              <details>
+                <summary className="cursor-pointer select-none text-xs font-medium text-ink">Cerrar el día</summary>
+                <div className="mt-3">
+                  <CloseDayForm defaults={{ energy: sht?.ser.checkin?.energy ?? null, focus: sht?.ser.checkin?.focus ?? null }} />
+                </div>
               </details>
             )}
           </div>

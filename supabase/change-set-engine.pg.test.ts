@@ -475,3 +475,41 @@ describe("B2. override de P0/P1/P2 (0021)", () => {
     });
   });
 });
+
+// -----------------------------------------------------------------------------
+describe("B4. cierre del día (0022)", () => {
+  it("guarda el snapshot con sus métricas y queda inmutable; un faltante no es cero", async () => {
+    await as(A, async () => {
+      const payload = {
+        date: "2026-10-09",
+        mission: "P0: Contactar prospectos",
+        tiers: { p0: { planned: 2, done: 1 }, p1: { planned: 1, done: 1 }, p2: { planned: 0, done: 0 } },
+        execution_score: 67,
+        minutes_worked: 240,
+        energy: 4,
+        focus: 3,
+        problems: ["Pocas respuestas"],
+        blockers: [],
+        learnings: ["El guion B responde mejor"],
+        tomorrow: ["Follow-ups de los 17"],
+        notes: null,
+        metrics: [
+          { metric_key: "contacts", target: 60, actual: 47, source: "vant.prospecting_sessions" },
+          { metric_key: "followups", target: 10, actual: null, source: "vant.prospecting_sessions" },
+        ],
+      };
+      const id = (await one<{ id: string }>("select close_daily_log($1) as id", [JSON.stringify(payload)])).id;
+      expect(await one("select execution_score::int as s, minutes_worked, learnings, closed_at is not null as closed from daily_logs where id = $1", [id])).toEqual({
+        s: 67, minutes_worked: 240, learnings: ["El guion B responde mejor"], closed: true,
+      });
+      expect((await q("select metric_key, actual::text, quality from daily_log_metrics where daily_log_id = $1 order by metric_key", [id])).rows).toEqual([
+        { metric_key: "contacts", actual: "47", quality: "self_reported" },
+        { metric_key: "followups", actual: null, quality: "missing" },
+      ]);
+      await expect(q("select close_daily_log($1)", [JSON.stringify(payload)])).rejects.toThrow(/ya está cerrado/);
+      await expect(q("update daily_logs set execution_score = 100 where id = $1", [id])).rejects.toThrow(/ya está cerrado/);
+      await expect(q("delete from daily_logs where id = $1", [id])).rejects.toThrow(/ya está cerrado/);
+      await expect(q("update daily_log_metrics set actual = 60 where daily_log_id = $1", [id])).rejects.toThrow(/día cerrado/);
+    });
+  });
+});
