@@ -64,3 +64,14 @@ export function startOfDayInTimezone(isoDate: string, timezone: string): string 
   const offset = asLocal - guess; // ms que la zona va por delante de UTC
   return new Date(guess - offset).toISOString();
 }
+
+/**
+ * Instante UTC (ISO) de una fecha y hora locales ("YYYY-MM-DD", "HH:MM") en
+ * `timezone`. Para registrar cuándo se recibió un pago tal como lo ve el
+ * usuario (21:00 en Bogotá = 02:00 UTC del día siguiente).
+ */
+export function zonedTimeToIso(isoDate: string, hhmm: string, timezone: string): string {
+  const [h, mi] = hhmm.split(":").map(Number);
+  const dayStart = Date.parse(startOfDayInTimezone(isoDate, timezone));
+  return new Date(dayStart + (h * 60 + mi) * 60_000).toISOString();
+}

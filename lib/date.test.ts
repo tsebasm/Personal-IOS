@@ -25,3 +25,11 @@ describe("startOfDayInTimezone", () => {
     expect(startOfDayInTimezone("2026-09-24", "Asia/Tokyo")).toBe("2026-09-23T15:00:00.000Z");
   });
 });
+
+describe("zonedTimeToIso", () => {
+  it("convierte hora local de Bogotá a UTC (puede caer al día siguiente)", async () => {
+    const { zonedTimeToIso } = await import("./date");
+    expect(zonedTimeToIso("2026-10-05", "21:00", "America/Bogota")).toBe("2026-10-06T02:00:00.000Z");
+    expect(zonedTimeToIso("2026-10-05", "08:30", "America/Bogota")).toBe("2026-10-05T13:30:00.000Z");
+  });
+});
