@@ -14,6 +14,10 @@ import {
 } from "@/lib/intelligence/change-sets";
 import { PermissionError } from "@/lib/intelligence/permissions";
 import type { ActionState } from "./types";
+import { getCurrentProfile } from "@/lib/data/profile";
+import { isoDateInTimezone } from "@/lib/date";
+import { TemplateInterpreter } from "@/lib/intelligence/template-interpreter";
+import type { StrategyContext } from "@/lib/intelligence/interpreter";
 
 /**
  * Acciones de la UI sobre change sets. Siempre actor = 'user': solo se llaman
@@ -183,6 +187,84 @@ export async function reproposeSet(_prev: ActionState, formData: FormData): Prom
   if (!id.success) return { ok: false, error: "Solicitud inválida." };
   try {
     await proposeChangeSet(db, "user", id.data, null, kind);
+  } catch (e) {
+    return fail(e);
+  }
+  revalidatePath("/dashboard/cambios");
+  return { ok: true };
+}
+
+const importSchema = z.object({
+  title: z.string().trim().min(1, "Ponle un nombre al plan.").max(200),
+  content: z.string().trim().min(20, "Pega el plan completo.").max(50_000),
+});
+
+/**
+ * Entrada humana → interpretación → propuesta (P-10). Guarda el documento tal
+ * cual, lo interpreta (plantilla determinista; Claude en la Fase C), registra
+ * preguntas e inconsistencias y, si el plan es interpretable, deja un paquete
+ * PROPUESTO esperando tu aprobación. Nada se aplica aquí.
+ */
+export async function importPlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const { supabase, db, user } = await session();
+  if (!user) return { ok: false, error: "Debes iniciar sesión." };
+  const parsed = importSchema.safeParse({ title: formData.get("title"), content: formData.get("content") });
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  const { title, content } = parsed.data;
+
+  const profile = await getCurrentProfile();
+  const today = isoDateInTimezone(profile?.timezone ?? "America/Bogota");
+  const [{ data: prof }, { data: systems }, { data: metrics }] = await Promise.all([
+    supabase.from("profiles").select("north_star_goal_id").eq("id", user.id).maybeSingle(),
+    supabase.from("systems").select("id, title").is("archived_at", null),
+    supabase.from("metric_definitions").select("key"),
+  ]);
+  const goalId = (prof?.north_star_goal_id as string | null) ?? null;
+  const { data: goal } = goalId ? await supabase.from("goals").select("id, title, locked_at").eq("id", goalId).maybeSingle() : { data: null };
+  const ctx: StrategyContext = {
+    today,
+    goal: goal ? { id: goal.id, title: goal.title, locked: !!goal.locked_at } : null,
+    systems: (systems ?? []) as { id: string; title: string }[],
+    metricKeys: (metrics ?? []).map((m) => m.key as string),
+  };
+
+  const interp = new TemplateInterpreter().interpret(content, ctx);
+  const hash = createHash("sha256").update(content).digest("hex");
+  try {
+    const { data: existing } = await supabase.from("source_documents").select("id").eq("content_hash", hash).maybeSingle();
+    let docId = existing?.id as string | undefined;
+    if (!docId) {
+      const { data: doc, error } = await supabase
+        .from("source_documents")
+        .insert({ kind: "chat_text", title, content, content_hash: hash, created_by: "user" })
+        .select("id")
+        .single();
+      if (error || !doc) return { ok: false, error: `No se pudo guardar el documento: ${error?.message}` };
+      docId = doc.id;
+    }
+    const { data: imp, error: impErr } = await supabase
+      .from("plan_imports")
+      .insert({
+        source_document_id: docId,
+        interpreter: interp.interpreter,
+        interpreter_version: interp.interpreterVersion,
+        status: interp.changeSet ? "proposed" : "needs_input",
+        detected: interp.detected,
+        inconsistencies: interp.inconsistencies,
+        questions: interp.questions,
+        context_snapshot: { today, goal: ctx.goal, systems: ctx.systems.length, metricKeys: ctx.metricKeys },
+      })
+      .select("id")
+      .single();
+    if (impErr || !imp) return { ok: false, error: `No se pudo registrar la interpretación: ${impErr?.message}` };
+
+    if (!interp.changeSet) {
+      const why = [...interp.inconsistencies.map((i) => i.message), ...interp.questions.map((q) => q.question)].join(" ");
+      return { ok: false, error: `El plan quedó guardado pero necesita información antes de proponerse: ${why}` };
+    }
+    const cs = interp.changeSet;
+    const id = await createChangeSet(db, "user", { title: cs.title, rationale: cs.rationale, planImportId: imp.id, items: cs.items });
+    await proposeChangeSet(db, "user", id, cs.decision);
   } catch (e) {
     return fail(e);
   }

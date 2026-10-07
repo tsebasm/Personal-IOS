@@ -1,10 +1,10 @@
-import { GitPullRequest, Lock } from "lucide-react";
+import { FileText, GitPullRequest, Lock } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentProfile } from "@/lib/data/profile";
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
-import { GoalChangeForm, SetActions } from "./forms";
+import { GoalChangeForm, ImportPlanForm, SetActions } from "./forms";
 
 /**
  * Cambios: la revisión humana de los paquetes de cambios (C-3). Nada
@@ -34,6 +34,7 @@ type SetRow = {
   failure_reason: string | null;
   created_at: string;
   decision: { number: number; title: string; status: string } | null;
+  plan_import: { interpreter: string; questions: { id: string; question: string }[]; inconsistencies: { code: string; message: string }[] } | null;
   change_items: { seq: number; op: string; entity_type: string; payload: Record<string, unknown>; status: string; sensitivity: string }[];
 };
 
@@ -44,7 +45,7 @@ export default async function ChangesPage() {
     supabase
       .from("change_sets")
       .select(
-        "id, title, kind, status, proposed_by, rationale, failure_reason, created_at, decision:decisions!change_sets_decision_id_fkey(number, title, status), change_items(seq, op, entity_type, payload, status, sensitivity)"
+        "id, title, kind, status, proposed_by, rationale, failure_reason, created_at, decision:decisions!change_sets_decision_id_fkey(number, title, status), plan_import:plan_imports(interpreter, questions, inconsistencies), change_items(seq, op, entity_type, payload, status, sensitivity)"
       )
       .order("created_at", { ascending: false })
       .limit(30),
@@ -88,6 +89,18 @@ export default async function ChangesPage() {
         )}
 
         <Card>
+          <CardHeader title="Importar un plan" icon={<FileText size={16} className="text-ink-dim" />} />
+          <div className="px-5 pb-5">
+            <details>
+              <summary className="cursor-pointer select-none text-xs font-medium text-ink">Pegar un plan, hipótesis o estrategia</summary>
+              <div className="mt-3">
+                <ImportPlanForm />
+              </div>
+            </details>
+          </div>
+        </Card>
+
+        <Card>
           <CardHeader title="Paquetes de cambios" icon={<GitPullRequest size={16} className="text-ink-dim" />} />
           {error ? (
             <p className="px-5 pb-5 text-sm text-warn">No se pudieron leer los cambios ({error.message}). ¿Faltan las migraciones 0018/0019?</p>
@@ -109,6 +122,16 @@ export default async function ChangesPage() {
                       {s.decision && ` · Decisión #${String(s.decision.number).padStart(3, "0")} (${s.decision.status})`}
                     </p>
                     {s.rationale && <p className="text-xs text-ink mb-2">{s.rationale}</p>}
+                    {s.plan_import && (s.plan_import.questions.length > 0 || s.plan_import.inconsistencies.length > 0) && (
+                      <ul className="mb-2 flex flex-col gap-0.5 text-xs text-warn">
+                        {s.plan_import.questions.map((q) => (
+                          <li key={q.id}>Pregunta: {q.question}</li>
+                        ))}
+                        {s.plan_import.inconsistencies.map((i, k) => (
+                          <li key={k}>Aviso: {i.message}</li>
+                        ))}
+                      </ul>
+                    )}
                     <ul className="mb-3 flex flex-col gap-1">
                       {[...s.change_items].sort((a, b) => a.seq - b.seq).map((it) => (
                         <li key={it.seq} className="text-xs text-ink-dim">

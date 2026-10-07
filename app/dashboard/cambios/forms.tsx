@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { applySet, proposeGoalChange, reproposeSet, reviewAll } from "@/lib/actions/change-sets";
+import { applySet, importPlan, proposeGoalChange, reproposeSet, reviewAll } from "@/lib/actions/change-sets";
 import { initialActionState, type ActionState } from "@/lib/actions/types";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
@@ -91,6 +91,70 @@ export function GoalChangeForm({ goalId, defaults }: { goalId: string; defaults:
       </Field>
       <div className="flex items-center gap-3">
         <Button size="sm" disabled={pending}>{pending ? "Proponiendo…" : "Proponer cambio de meta"}</Button>
+        <Feedback state={state} ok="Propuesto. Revísalo abajo: nada cambia hasta que lo apruebes y lo apliques." />
+      </div>
+    </form>
+  );
+}
+
+const TEMPLATE_HELP = `---
+plan: Nombre del plan
+inicio: AAAA-MM-DD
+---
+## Objetivo
+Conseguir 5 clientes
+- meta: 5 clientes
+- plazo: 60 días
+- métrica: closes
+
+## Sistema
+Adquisición outbound
+- tipo: acquisition
+- canal: social_outbound
+- embudo: contacts, replies, meetings_booked, proposals, closes
+
+## Hipótesis
+Qué crees que va a pasar y por qué
+- tipo: volume
+- confianza: low
+- base: supuesto
+
+## Rutina
+Contactar prospectos
+- métrica: contacts
+- objetivo: 30 contactos
+- cadencia: weekdays
+- prioridad: p0
+
+## Experimento
+Volumen 30 → 60
+- intervención: Contactar prospectos = 60 durante 14 días
+- métrica: replies
+- muestra: 600
+
+## Proyecto
+Campaña de adquisición outbound
+
+## Tareas
+- [p0] Construir lista de prospectos: 840 prospectos
+- [p1] Preparar guion de outbound`;
+
+/** Entrada humana → interpretación → propuesta. Nada se aplica sin tu aprobación. */
+export function ImportPlanForm() {
+  const [state, action, pending] = useActionState(importPlan, initialActionState);
+  return (
+    <form action={action} className="flex flex-col gap-3">
+      <Field label="Nombre" htmlFor="ip-title">
+        <Input id="ip-title" name="title" placeholder="Plan outbound octubre" required />
+      </Field>
+      <Field label="Plan (plantilla)" htmlFor="ip-content">
+        <Textarea id="ip-content" name="content" rows={12} className="font-mono text-xs" placeholder={TEMPLATE_HELP} required />
+      </Field>
+      <p className="text-[0.7rem] text-ink-dim">
+        El ejemplo del recuadro muestra el formato. Lo que el plan no diga se convierte en pregunta, no en un supuesto oculto. Un plan nunca cambia la meta principal.
+      </p>
+      <div className="flex items-center gap-3">
+        <Button size="sm" disabled={pending}>{pending ? "Interpretando…" : "Interpretar y proponer"}</Button>
         <Feedback state={state} ok="Propuesto. Revísalo abajo: nada cambia hasta que lo apruebes y lo apliques." />
       </div>
     </form>
